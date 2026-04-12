@@ -143,7 +143,6 @@ def serialize_srt_data(srt_data: SrtData) -> str:
                 "",
             ]
         )
-
     return text
 
 
@@ -151,15 +150,16 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
     if movie_info.tmdb_id is None:
         return movie_info
 
-    try:
-        token = os.environ.get("TMDB_ACCESS_TOKEN")
-        if not token:
-            return movie_info
+    token = os.environ.get("TMDB_ACCESS_TOKEN")
+    if not token:
+        return movie_info
 
+    try:
         url = f"https://api.themoviedb.org/3/movie/{movie_info.tmdb_id}"
         headers = {"Authorization": f"Bearer {token}"}
 
         response = requests.get(url, headers=headers)
+        response.raise_for_status()
 
         data = response.json()
         overview = data.get("overview")
@@ -175,7 +175,7 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
 
 def ollama_chat(system_prompt: str, message: str) -> str:
     url = "http://localhost:11434/api/chat"
-    model = "gemma4:26b"
+    model = "gemma4:31b"
     # model = "qwen3.5:35b"
     data = {
         "model": model,
@@ -188,6 +188,7 @@ def ollama_chat(system_prompt: str, message: str) -> str:
     }
 
     response = requests.post(url, json=data)
+    response.raise_for_status()
     data = response.json()
     return data["message"]["content"]
 
