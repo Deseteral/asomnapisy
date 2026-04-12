@@ -36,7 +36,10 @@ class SrtData:
 
 def main():
     args = parse_args()
+    mode_translate(args)
 
+
+def mode_translate(args: AsomnapisyArgs):
     srt_data = parse_srt_file(args.srt_file_path)
     if srt_data is None:
         exit_with_error("Cannot parse srt file.")
@@ -53,32 +56,25 @@ def main():
     translated_subtitles: list[SrtSubtitle] = []
 
     for idx in range(len(srt_data.subtitles)):
-        # for idx in range(30):
         subtitle = srt_data.subtitles[idx]
-
-        surrounding_context_len = 5
-
-        og_start = max(idx - surrounding_context_len, 0)
-        og_end = min(idx + surrounding_context_len, len(srt_data.subtitles) - 1)
-        original_lines = [
-            line
-            for subtitle in srt_data.subtitles[og_start:og_end]
-            for line in subtitle.content
-        ]
 
         system_prompt = translate_movie_system_prompt(
             movie_info,
             source_lang=args.source_lang,
             target_lang=args.target_lang,
-            original_lines=original_lines,
+            original_subtitles=srt_data.subtitles,
+            current_subtitle_idx=idx,
+            surrounding_context_len=5,
         )
+
         # print(system_prompt)
         # print("")
+        # print("")
 
-        subtitle_text = "\n".join(subtitle.content)
-        print(subtitle_text)
+        text_to_translate = "\n".join(subtitle.content)
+        print(text_to_translate)
 
-        output = ollama_chat(system_prompt, subtitle_text)
+        output = ollama_chat(system_prompt, text_to_translate)
         print(output)
         print("")
 
@@ -194,33 +190,57 @@ def ollama_chat(system_prompt: str, message: str) -> str:
 
 
 def translate_movie_system_prompt(
-    movie_info: MovieInfo, source_lang: str, target_lang: str, original_lines: list[str]
+    movie_info: MovieInfo,
+    source_lang: str,
+    target_lang: str,
+    original_subtitles: list[SrtSubtitle],
+    current_subtitle_idx: int,
+    surrounding_context_len: int,
 ) -> str:
-    joined_lines = "\n".join(original_lines)
     release_year_text = f" released in {movie_info.year}" if movie_info.year else ""
+
     description_text = (
         f"""
-    For more context this is the description of the movie:
-    ```
-    {movie_info.description}
-    ```
-    """
+For more context this is the description of the movie:
+```
+{movie_info.description}
+```
+    """.strip()
         if movie_info.description
         else ""
     )
 
+    if surrounding_context_len == 0:
+        og_start = 0
+        og_end = len(original_subtitles)
+    else:
+        og_start = max(current_subtitle_idx - surrounding_context_len, 0)
+        og_end = min(
+            current_subtitle_idx + surrounding_context_len, len(original_subtitles)
+        )
+
+    original_lines = "\n".join(
+        [
+            line
+            for subtitle in original_subtitles[og_start:og_end]
+            for line in subtitle.content
+        ]
+    )
+
     return f"""
-    You are a professional translator and the movie expert. You are going to translate movie subtitles.
-    The movie we're translating is "{movie_info.title}"{release_year_text}.
-    {description_text}
-    You will be translating from {source_lang} to {target_lang}. 
-    Preserve the meaning, tone, and natural spoken style. Return only the translated subtitles and nothing else.
-    I will only give you a couple of lines at the time. Translate only what you will receive. Preserve new lines.
-    Here is a couple of lines before/after the ones you're translating so you'll know what is the context:"
-    ```
-    {joined_lines}
-    ```
-    """
+You are a professional translator and the movie expert. You are going to translate movie subtitles.
+The movie we're translating is "{movie_info.title}"{release_year_text}.
+{description_text}
+You will be translating from {source_lang} to {target_lang}. 
+Preserve the meaning, tone, and natural spoken style. Return only the translated subtitles and nothing else.
+Sometimes there are new lines in the middle of sentence. They're required to correctly fit subtitles on the display. New lines don't mean anything. Treat those sentences as one sentence. Only full stop/period mean "end of sentence". Preserve new lines for presentation purposes.
+I will only give you a couple of lines at the time. Return only the translation of given lines.
+Here is a couple of lines before/after the ones I will give you so you'll know what is the context. Translate all subtitles I will give you and then return only the ones I'm asking for."
+```
+{original_lines}
+```
+I will now provide the lines that you need to translate. Remember that they're a continuous part of the whole movie. Translate them in the context of the surrounding lines.
+    """.strip()
 
 
 def parse_args() -> AsomnapisyArgs:
