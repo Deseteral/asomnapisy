@@ -14,6 +14,7 @@ class AsomnapisyArgs:
     source_lang: str
     target_lang: str
     srt_file_path: str
+    model: str | None
 
 
 @dataclass
@@ -76,7 +77,7 @@ def mode_translate(args: AsomnapisyArgs):
         text_to_translate = "\n".join(subtitle.content)
         print(f"[white on dark_blue]{text_to_translate}")
 
-        output = ollama_chat(system_prompt, text_to_translate)
+        output = ollama_chat(system_prompt, text_to_translate, args.model)
         print(f"[black on gold1]{output}")
         print("")
 
@@ -171,10 +172,9 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
         return movie_info
 
 
-def ollama_chat(system_prompt: str, message: str) -> str:
+def ollama_chat(system_prompt: str, message: str, model: str | None) -> str:
     url = "http://localhost:11434/api/chat"
-    model = "gemma4:31b"
-    # model = "qwen3.5:35b"
+    model = model if model is not None else "gemma4:31b"
     data = {
         "model": model,
         "messages": [
@@ -253,16 +253,21 @@ def parse_args() -> AsomnapisyArgs:
 
     _ = parser.add_argument(
         "source_lang",
-        help="name of the language to translate from (ex. 'english')",
+        help="name of the language to translate from (ex. 'english').",
         type=str,
     )
     _ = parser.add_argument(
         "target_lang",
-        help="name of the language to translate to (ex. 'polish')",
+        help="name of the language to translate to (ex. 'polish').",
         type=str,
     )
     _ = parser.add_argument(
-        "srt_file_path", help="path to srt file to translate", type=str
+        "srt_file_path", help="path to srt file to translate.", type=str
+    )
+    _ = parser.add_argument(
+        "--model",
+        help="name of the LLM that will be used for translation.",
+        type=str,
     )
 
     args = parser.parse_args()
@@ -270,6 +275,7 @@ def parse_args() -> AsomnapisyArgs:
         source_lang=args.source_lang,
         target_lang=args.target_lang,
         srt_file_path=args.srt_file_path,
+        model=args.model,
     )
 
 
