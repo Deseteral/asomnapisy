@@ -111,8 +111,8 @@ def parse_movie_info_from_srt_file_path(file_path: str) -> MovieInfo | None:
 
 
 def parse_srt_file(srt_file_path: str) -> SrtData | None:
-    file = open(srt_file_path)
-    text = file.read()
+    with open(srt_file_path) as file:
+        text = file.read()
     groups = text.split("\n\n")
 
     subtitles: list[SrtSubtitle] = []
@@ -152,7 +152,7 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
         return movie_info
 
     try:
-        token = os.environ["TMDB_ACCESS_TOKEN"]
+        token = os.environ.get("TMDB_ACCESS_TOKEN")
         if not token:
             return movie_info
 
@@ -162,7 +162,7 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
         response = requests.get(url, headers=headers)
 
         data = response.json()
-        overview = data["overview"]
+        overview = data.get("overview")
         if not overview:
             return movie_info
 
