@@ -198,16 +198,19 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
 def ollama_chat(system_prompt: str, message: str, model: str | None) -> str:
     url = "http://localhost:11434/v1/chat/completions"
     model = model if model is not None else "gemma4:31b"
-    return openai_chat(system_prompt, message, model, url)
+    return openai_chat(system_prompt, message, model, url, api_key=None)
 
 
 def openrouter_chat(system_prompt: str, message: str, model: str | None) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     model = model if model is not None else "google/gemini-2.5-pro"
-    return openai_chat(system_prompt, message, model, url)
+    api_key = os.environ["OPENROUTER_KEY"]
+    return openai_chat(system_prompt, message, model, url, api_key)
 
 
-def openai_chat(system_prompt: str, message: str, model: str, url: str, api_key: str | None) -> str:
+def openai_chat(
+    system_prompt: str, message: str, model: str, url: str, api_key: str | None
+) -> str:
     data = {
         "model": model,
         "messages": [
@@ -217,7 +220,7 @@ def openai_chat(system_prompt: str, message: str, model: str, url: str, api_key:
     }
     headers = {}
     if api_key is not None:
-        headers = { "Authorization": f"Bearer {api_key}" }
+        headers = {"Authorization": f"Bearer {api_key}"}
     response = requests.post(url, json=data, headers=headers)
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
@@ -254,11 +257,7 @@ For more context this is the description of the movie:
         )
 
     original_lines = "\n".join(
-        [
-            line
-            for subtitle in original_subtitles[og_start:og_end]
-            for line in subtitle.content
-        ]
+        flatten(list(map(lambda s: s.content, original_subtitles[og_start:og_end])))
     )
 
     return f"""
