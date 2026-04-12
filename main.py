@@ -1,9 +1,12 @@
+from enum import Enum
+from math import ceil
 import os
 import sys
 import argparse
 import re
 from pathlib import Path
 from dataclasses import dataclass
+from typing import TypeVar
 import requests
 from rich.progress import track
 from rich import print
@@ -36,6 +39,9 @@ class SrtSubtitle:
 class SrtData:
     subtitles: list[SrtSubtitle]
 
+    def get_full_text(self) -> str:
+        return "\n".join(flatten(list(map(lambda s: s.content, self.subtitles))))
+
 
 def main():
     args = parse_args()
@@ -47,6 +53,10 @@ def mode_translate(args: AsomnapisyArgs):
     if srt_data is None:
         exit_with_error("Cannot parse srt file.")
         return
+
+    print(
+        f"SRT file estimated token count: {estimate_token_count(srt_data.get_full_text())}\n"
+    )
 
     movie_info = parse_movie_info_from_srt_file_path(args.srt_file_path)
 
@@ -70,16 +80,11 @@ def mode_translate(args: AsomnapisyArgs):
             surrounding_context_len=5,
         )
 
-        # print(system_prompt)
-        # print("")
-        # print("")
-
         text_to_translate = "\n".join(subtitle.content)
         print(f"[white on dark_blue]{text_to_translate}")
 
         output = ollama_chat(system_prompt, text_to_translate, args.model)
-        print(f"[black on gold1]{output}")
-        print("")
+        print(f"[black on gold1]{output}\n")
 
         translated_subtitles.append(
             SrtSubtitle(
@@ -143,6 +148,24 @@ def serialize_srt_data(srt_data: SrtData) -> str:
             ]
         )
     return text
+
+
+class TokenEstimationHeuristic(Enum):
+    BY_WORD_COUNT = 1
+    BY_CHAR_COUNT = 2
+
+
+def estimate_token_count(
+    text: str,
+    heuristic: TokenEstimationHeuristic = TokenEstimationHeuristic.BY_WORD_COUNT,
+) -> int:
+    match heuristic:
+        case TokenEstimationHeuristic.BY_WORD_COUNT:
+            # 1000 tokens = ~750 words.
+            return int(len(text.split(" ")) / 0.75)
+        case TokenEstimationHeuristic.BY_CHAR_COUNT:
+            # 1 token = ~4 characters.
+            return int(ceil(len(text) / 4))
 
 
 def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
@@ -282,6 +305,13 @@ def parse_args() -> AsomnapisyArgs:
 def exit_with_error(msg: str):
     print(msg)
     sys.exit(1)
+
+
+T = TypeVar("T")
+
+
+def flatten(xss: list[list[T]]) -> list[T]:
+    return [x for xs in xss for x in xs]
 
 
 if __name__ == "__main__":
