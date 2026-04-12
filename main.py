@@ -157,7 +157,7 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
             return movie_info
 
         url = f"https://api.themoviedb.org/3/movie/{movie_info.tmdb_id}"
-        headers = {"Authorization": f"Authorization: Bearer {token}"}
+        headers = {"Authorization": f"Bearer {token}"}
 
         response = requests.get(url, headers=headers)
 
