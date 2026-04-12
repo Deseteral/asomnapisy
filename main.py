@@ -15,6 +15,7 @@ class AsomnapisyArgs:
     target_lang: str
     srt_file_path: str
 
+
 @dataclass
 class MovieInfo:
     title: str
@@ -22,11 +23,13 @@ class MovieInfo:
     tmdb_id: str | None
     description: str | None
 
+
 @dataclass
 class SrtSubtitle:
     order: int
     timestamp: str
     content: list[str]
+
 
 @dataclass
 class SrtData:
@@ -52,31 +55,45 @@ def main():
     translated_subtitles: list[SrtSubtitle] = []
 
     for idx in range(len(srt_data.subtitles)):
-    # for idx in range(30):
+        # for idx in range(30):
         subtitle = srt_data.subtitles[idx]
 
         surrounding_context_len = 5
 
         og_start = max(idx - surrounding_context_len, 0)
-        og_end = min(idx + surrounding_context_len, len(srt_data.subtitles)-1)
-        original_lines = [line for subtitle in srt_data.subtitles[og_start:og_end] for line in subtitle.content]
+        og_end = min(idx + surrounding_context_len, len(srt_data.subtitles) - 1)
+        original_lines = [
+            line
+            for subtitle in srt_data.subtitles[og_start:og_end]
+            for line in subtitle.content
+        ]
 
-        system_prompt = translate_movie_system_prompt(movie_info, source_lang=args.source_lang, target_lang=args.target_lang, original_lines=original_lines)
+        system_prompt = translate_movie_system_prompt(
+            movie_info,
+            source_lang=args.source_lang,
+            target_lang=args.target_lang,
+            original_lines=original_lines,
+        )
         # print(system_prompt)
         # print("")
 
-        input = '\n'.join(subtitle.content)
+        input = "\n".join(subtitle.content)
         print(input)
 
         output = ollama_chat(system_prompt, input)
         print(output)
         print("")
 
-        translated_subtitles.append(SrtSubtitle(order=subtitle.order, timestamp=subtitle.timestamp, content=output.splitlines()))
+        translated_subtitles.append(
+            SrtSubtitle(
+                order=subtitle.order,
+                timestamp=subtitle.timestamp,
+                content=output.splitlines(),
+            )
+        )
 
     with open("translated.srt", "w") as f:
         _ = f.write(serialize_srt_data(SrtData(subtitles=translated_subtitles)))
-
 
 
 def parse_movie_info_from_srt_file_path(file_path: str) -> MovieInfo | None:
@@ -89,8 +106,8 @@ def parse_movie_info_from_srt_file_path(file_path: str) -> MovieInfo | None:
         return None
 
     title = match.group(1).strip()
-    year = match.group('year')
-    tmdb_id = match.group('tmdb_id')
+    year = match.group("year")
+    tmdb_id = match.group("tmdb_id")
 
     return MovieInfo(title, year, tmdb_id, description=None)
 
@@ -98,7 +115,7 @@ def parse_movie_info_from_srt_file_path(file_path: str) -> MovieInfo | None:
 def parse_srt_file(srt_file_path: str) -> SrtData | None:
     file = open(srt_file_path)
     text = file.read()
-    groups = text.split('\n\n')
+    groups = text.split("\n\n")
 
     subtitles: list[SrtSubtitle] = []
 
@@ -119,13 +136,15 @@ def parse_srt_file(srt_file_path: str) -> SrtData | None:
 def serialize_srt_data(srt_data: SrtData) -> str:
     text = ""
     for subtitle in srt_data.subtitles:
-        text += '\n'.join([
-            f"{subtitle.order}",
-            subtitle.timestamp,
-            '\n'.join(subtitle.content),
-            "",
-            "",
-        ])
+        text += "\n".join(
+            [
+                f"{subtitle.order}",
+                subtitle.timestamp,
+                "\n".join(subtitle.content),
+                "",
+                "",
+            ]
+        )
 
     return text
 
@@ -135,19 +154,17 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
         return movie_info
 
     try:
-        token = os.environ['TMDB_ACCESS_TOKEN']
+        token = os.environ["TMDB_ACCESS_TOKEN"]
         if not token:
             return movie_info
 
         url = f"https://api.themoviedb.org/3/movie/{movie_info.tmdb_id}"
-        headers = {
-            "Authorization": f"Authorization: Bearer {token}"
-        }
+        headers = {"Authorization": f"Authorization: Bearer {token}"}
 
         response = requests.get(url, headers=headers)
 
         data = response.json()
-        overview = data['overview']
+        overview = data["overview"]
         if not overview:
             return movie_info
 
@@ -163,29 +180,35 @@ def ollama_chat(system_prompt: str, message: str) -> str:
     model = "gemma4:26b"
     # model = "qwen3.5:35b"
     data = {
-        'model': model,
-        'messages': [
-            { 'role': 'system', 'content': system_prompt },
-            { 'role': 'user', 'content': message },
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message},
         ],
-        'stream': False,
-        'think': False,
+        "stream": False,
+        "think": False,
     }
 
     response = requests.post(url, json=data)
     data = response.json()
-    return data['message']['content']
+    return data["message"]["content"]
 
 
-def translate_movie_system_prompt(movie_info: MovieInfo, source_lang: str, target_lang: str, original_lines: list[str]) -> str:
-    joined_lines = '\n'.join(original_lines)
+def translate_movie_system_prompt(
+    movie_info: MovieInfo, source_lang: str, target_lang: str, original_lines: list[str]
+) -> str:
+    joined_lines = "\n".join(original_lines)
     release_year_text = f" released in {movie_info.year}" if movie_info.year else ""
-    description_text = f"""
+    description_text = (
+        f"""
     For more context this is the description of the movie:
     ```
     {movie_info.description}
     ```
-    """ if movie_info.description else ""
+    """
+        if movie_info.description
+        else ""
+    )
 
     return f"""
     You are a professional translator and the movie expert. You are going to translate movie subtitles.
@@ -207,12 +230,26 @@ def parse_args() -> AsomnapisyArgs:
         description="asomnapisy - translate movie subtitles using local LLMs.",
     )
 
-    _ = parser.add_argument("source_lang", help="name of the language to translate from (ex. 'english')", type=str)
-    _ = parser.add_argument("target_lang", help="name of the language to translate to (ex. 'polish')", type=str)
-    _ = parser.add_argument("srt_file_path", help="path to srt file to translate", type=str)
+    _ = parser.add_argument(
+        "source_lang",
+        help="name of the language to translate from (ex. 'english')",
+        type=str,
+    )
+    _ = parser.add_argument(
+        "target_lang",
+        help="name of the language to translate to (ex. 'polish')",
+        type=str,
+    )
+    _ = parser.add_argument(
+        "srt_file_path", help="path to srt file to translate", type=str
+    )
 
     args = parser.parse_args()
-    return AsomnapisyArgs(source_lang=args.source_lang, target_lang=args.target_lang, srt_file_path=args.srt_file_path)
+    return AsomnapisyArgs(
+        source_lang=args.source_lang,
+        target_lang=args.target_lang,
+        srt_file_path=args.srt_file_path,
+    )
 
 
 def exit_with_error(msg: str):
