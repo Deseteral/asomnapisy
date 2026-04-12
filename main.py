@@ -196,22 +196,22 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
 
 
 def ollama_chat(system_prompt: str, message: str, model: str | None) -> str:
-    url = "http://localhost:11434/api/chat"
+    url = "http://localhost:11434/v1/chat/completions"
     model = model if model is not None else "gemma4:31b"
+    return openai_chat(system_prompt, message, model, url)
+
+
+def openai_chat(system_prompt: str, message: str, model: str, url: str) -> str:
     data = {
         "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": message},
         ],
-        "stream": False,
-        "think": False,
     }
-
     response = requests.post(url, json=data)
     response.raise_for_status()
-    data = response.json()
-    return data["message"]["content"]
+    return response.json()["choices"][0]["message"]["content"]
 
 
 def translate_movie_system_prompt(
