@@ -59,25 +59,40 @@ def mode_translate(args: AsomnapisyArgs):
     )
 
     movie_info = parse_movie_info_from_srt_file_path(args.srt_file_path)
-
     if movie_info is None:
         exit_with_error("Cannot parse movie info from srt file name.")
         return
 
     movie_info = enrich_movie_info_with_description(movie_info)
 
+    use_local_models = False
+
+    if use_local_models:
+        translated_srt = translate_by_line(srt_data, movie_info, args)
+    else:
+        translated_srt = translate_full(srt_data, movie_info, args)
+
+    with open("translated.srt", "w") as f:
+        _ = f.write(serialize_srt_data(translated_srt))
+
+
+def translate_by_line(
+    srt_data: SrtData, movie_info: MovieInfo, args: AsomnapisyArgs
+) -> SrtData:
     translated_subtitles: list[SrtSubtitle] = []
 
     for idx in track(range(len(srt_data.subtitles)), description="Translating…"):
         subtitle = srt_data.subtitles[idx]
 
-        system_prompt = translate_movie_system_prompt(
-            movie_info,
-            source_lang=args.source_lang,
-            target_lang=args.target_lang,
-            original_subtitles=srt_data.subtitles,
-            current_subtitle_idx=idx,
-            surrounding_context_len=5,
+        system_prompt = (
+            translate_movie_system_prompt_with_partial_subtitles_line_by_line(
+                movie_info,
+                source_lang=args.source_lang,
+                target_lang=args.target_lang,
+                original_subtitles=srt_data.subtitles,
+                current_subtitle_idx=idx,
+                surrounding_context_len=5,
+            )
         )
 
         text_to_translate = "\n".join(subtitle.content)
@@ -94,8 +109,48 @@ def mode_translate(args: AsomnapisyArgs):
             )
         )
 
-    with open("translated.srt", "w") as f:
-        _ = f.write(serialize_srt_data(SrtData(subtitles=translated_subtitles)))
+    return SrtData(subtitles=translated_subtitles)
+
+
+def translate_full(
+    srt_data: SrtData, movie_info: MovieInfo, args: AsomnapisyArgs
+) -> SrtData:
+    prompt = translate_movie_prompt_full_subtitiles_full_response(
+        movie_info, args.source_lang, args.target_lang, srt_data
+    )
+
+    output = openrouter_chat(system_prompt=None, message=prompt, model=args.model)
+    with open("llm_response.txt", "w") as f:
+        _ = f.write(output)
+    # with open("llm_response.txt", "r") as f:
+    #     output = f.read()
+
+    output_lines = output.splitlines()
+
+    # Check if LLM was _intelligent_ enough to follow the instructions.
+    output_line_count = len(output_lines)
+    original_line_count = len(srt_data.get_full_text().splitlines())
+    assert(original_line_count == output_line_count)
+
+    print(original_line_count, output_line_count)
+
+    translated_subtitles: list[SrtSubtitle] = []
+    current_line_idx = 0
+
+    for subtitle in srt_data.subtitles:
+        translated_content: list[str] = []
+        for _ in subtitle.content:
+            translated_content.append(output_lines[current_line_idx])
+            current_line_idx += 1
+        translated_subtitles.append(
+            SrtSubtitle(
+                order=subtitle.order,
+                timestamp=subtitle.timestamp,
+                content=translated_content,
+            )
+        )
+
+    return SrtData(subtitles=translated_subtitles)
 
 
 def parse_movie_info_from_srt_file_path(file_path: str) -> MovieInfo | None:
@@ -195,13 +250,13 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
         return movie_info
 
 
-def ollama_chat(system_prompt: str, message: str, model: str | None) -> str:
+def ollama_chat(system_prompt: str | None, message: str, model: str | None) -> str:
     url = "http://localhost:11434/v1/chat/completions"
     model = model if model is not None else "gemma4:31b"
     return openai_chat(system_prompt, message, model, url, api_key=None)
 
 
-def openrouter_chat(system_prompt: str, message: str, model: str | None) -> str:
+def openrouter_chat(system_prompt: str | None, message: str, model: str | None) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     model = model if model is not None else "google/gemini-2.5-pro"
     api_key = os.environ["OPENROUTER_KEY"]
@@ -209,14 +264,16 @@ def openrouter_chat(system_prompt: str, message: str, model: str | None) -> str:
 
 
 def openai_chat(
-    system_prompt: str, message: str, model: str, url: str, api_key: str | None
+    system_prompt: str | None, message: str, model: str, url: str, api_key: str | None
 ) -> str:
+    messages: list[object] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": message})
+
     data = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message},
-        ],
+        "messages": messages,
     }
     headers = {}
     if api_key is not None:
@@ -226,7 +283,7 @@ def openai_chat(
     return response.json()["choices"][0]["message"]["content"]
 
 
-def translate_movie_system_prompt(
+def translate_movie_system_prompt_with_partial_subtitles_line_by_line(
     movie_info: MovieInfo,
     source_lang: str,
     target_lang: str,
@@ -273,6 +330,44 @@ Here is a couple of lines before/after the ones I will give you so you'll know w
 {original_lines}
 ```
 I will now provide the lines that you need to translate. Remember that they're a continuous part of the whole movie. Translate them in the context of the surrounding lines.
+    """.strip()
+
+
+def translate_movie_prompt_full_subtitiles_full_response(
+    movie_info: MovieInfo,
+    source_lang: str,
+    target_lang: str,
+    srt_data: SrtData,
+) -> str:
+    release_year_text = f" released in {movie_info.year}" if movie_info.year else ""
+
+    description_text = (
+        f"""
+For more context this is the description of the movie:
+```
+{movie_info.description}
+```
+    """.strip()
+        if movie_info.description
+        else ""
+    )
+
+    original_lines = srt_data.get_full_text()
+
+    return f"""
+You are a professional translator and the movie expert. You are going to translate movie subtitles.
+The movie we're translating is "{movie_info.title}"{release_year_text}.
+{description_text}
+You will be translating from {source_lang} to {target_lang}. 
+Preserve the meaning, tone, and natural spoken style. 
+I will provide you with all subtitles for the movie. Translate them.
+Subtitles fill be divided into groups. Each group is separated by one empty line. Respect groups in translated output. Keep each translated line in its corresponding group. The groups are for processing only. For the purpose of translation tjreat the subtitles as single body of text.
+Sometimes there are new lines in the middle of sentence. They're required to correctly fit subtitles on the display. New lines don't mean anything. Treat those sentences as one sentence. Only full stop/period mean "end of sentence". Preserve new lines.
+Return only the translated subtitles and nothing else - THIS IS VERY IMPORTANT.
+Full movie subtitles:
+```
+{original_lines}
+```
     """.strip()
 
 
