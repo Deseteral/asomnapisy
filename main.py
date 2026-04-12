@@ -201,7 +201,13 @@ def ollama_chat(system_prompt: str, message: str, model: str | None) -> str:
     return openai_chat(system_prompt, message, model, url)
 
 
-def openai_chat(system_prompt: str, message: str, model: str, url: str) -> str:
+def openrouter_chat(system_prompt: str, message: str, model: str | None) -> str:
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    model = model if model is not None else "google/gemini-2.5-pro"
+    return openai_chat(system_prompt, message, model, url)
+
+
+def openai_chat(system_prompt: str, message: str, model: str, url: str, api_key: str | None) -> str:
     data = {
         "model": model,
         "messages": [
@@ -209,7 +215,10 @@ def openai_chat(system_prompt: str, message: str, model: str, url: str) -> str:
             {"role": "user", "content": message},
         ],
     }
-    response = requests.post(url, json=data)
+    headers = {}
+    if api_key is not None:
+        headers = { "Authorization": f"Bearer {api_key}" }
+    response = requests.post(url, json=data, headers=headers)
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
 
