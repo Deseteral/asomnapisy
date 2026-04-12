@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from dataclasses import dataclass
 import requests
+from rich.progress import track
+from rich import print
 
 
 @dataclass
@@ -55,7 +57,7 @@ def mode_translate(args: AsomnapisyArgs):
 
     translated_subtitles: list[SrtSubtitle] = []
 
-    for idx in range(len(srt_data.subtitles)):
+    for idx in track(range(len(srt_data.subtitles)), description="Translating…"):
         subtitle = srt_data.subtitles[idx]
 
         system_prompt = translate_movie_system_prompt(
@@ -72,10 +74,10 @@ def mode_translate(args: AsomnapisyArgs):
         # print("")
 
         text_to_translate = "\n".join(subtitle.content)
-        print(text_to_translate)
+        print(f"[white on dark_blue]{text_to_translate}")
 
         output = ollama_chat(system_prompt, text_to_translate)
-        print(output)
+        print(f"[black on gold1]{output}")
         print("")
 
         translated_subtitles.append(

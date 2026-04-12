@@ -6,4 +6,5 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.33.1",
+    "rich>=15.0.0",
 ]
