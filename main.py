@@ -1,5 +1,3 @@
-from ast import parse
-from inspect import ClosureVars
 import os
 import sys
 import argparse
@@ -77,10 +75,10 @@ def main():
         # print(system_prompt)
         # print("")
 
-        input = "\n".join(subtitle.content)
-        print(input)
+        subtitle_text = "\n".join(subtitle.content)
+        print(subtitle_text)
 
-        output = ollama_chat(system_prompt, input)
+        output = ollama_chat(system_prompt, subtitle_text)
         print(output)
         print("")
 
@@ -170,7 +168,7 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
 
         movie_info.description = overview
         return movie_info
-    except:
+    except Exception:
         print("Could not fetch movie details from TMDB")
         return movie_info
 
