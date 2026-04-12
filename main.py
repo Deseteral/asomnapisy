@@ -1,3 +1,5 @@
+import json
+import uuid
 from enum import Enum
 from math import ceil
 import os
@@ -6,7 +8,7 @@ import argparse
 import re
 from pathlib import Path
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import TypeVar, Any
 import requests
 from rich.progress import track
 from rich import print
@@ -17,7 +19,9 @@ class AsomnapisyArgs:
     source_lang: str
     target_lang: str
     srt_file_path: str
+    mode: str | None
     model: str | None
+    use_local_models: bool
 
 
 @dataclass
@@ -34,13 +38,16 @@ class SrtSubtitle:
     timestamp: str
     content: list[str]
 
+    def get_full_text(self) -> str:
+        return "\n".join(self.content)
+
 
 @dataclass
 class SrtData:
     subtitles: list[SrtSubtitle]
 
     def get_full_text(self) -> str:
-        return "\n".join(flatten(list(map(lambda s: s.content, self.subtitles))))
+        return "\n".join(map(lambda s: s.get_full_text(), self.subtitles))
 
 
 def main():
@@ -55,7 +62,7 @@ def mode_translate(args: AsomnapisyArgs):
         return
 
     print(
-        f"SRT file estimated token count: {estimate_token_count(srt_data.get_full_text())}\n"
+        f"SRT file estimated token count: {estimate_token_count(srt_data.get_full_text())}"
     )
 
     movie_info = parse_movie_info_from_srt_file_path(args.srt_file_path)
@@ -65,20 +72,125 @@ def mode_translate(args: AsomnapisyArgs):
 
     movie_info = enrich_movie_info_with_description(movie_info)
 
-    use_local_models = False
-
-    if use_local_models:
-        translated_srt = translate_by_line(srt_data, movie_info, args)
+    if args.use_local_models:
+        chunk_size = 1
+        context_size = 4
     else:
-        translated_srt = translate_full(srt_data, movie_info, args)
+        chunk_size = 30
+        context_size = 4
+
+    if args.mode == "chunked":
+        translated_srt = translate_chunked(
+            srt_data, movie_info, chunk_size, context_size, args
+        )
+    else:
+        translated_srt = translate_by_line(srt_data, movie_info, args)
 
     with open("translated.srt", "w") as f:
         _ = f.write(serialize_srt_data(translated_srt))
 
 
+def translate_chunked(
+    srt_data: SrtData,
+    movie_info: MovieInfo,
+    chunk_size: int,
+    context_size: int,
+    args: AsomnapisyArgs,
+) -> SrtData:
+    session_id = f"asomnapisy_{slugify(movie_info.title)}_{str(uuid.uuid4())}"
+    print(f"Session ID: [blue italic]{session_id}")
+
+    system_prompt_year = f" ({movie_info.year})" if movie_info.year else ""
+    system_prompt_description = (
+        f"Description: {movie_info.description}" if movie_info.description else ""
+    )
+    system_prompt = f"""
+You are a professional movie translator ({args.source_lang} to {args.target_lang}).
+Movie: {movie_info.title}{system_prompt_year}
+{system_prompt_description}
+
+Rules:
+- Input is a JSON object with 'context_before', 'translate_this', and 'context_after'.
+- Use context for accuracy, but ONLY translate strings in the 'translate_this' array.
+- Return a JSON object with a single key 'translations' containing the array of translated strings.
+- Parity is mandatory: the output array length MUST match the input 'translate_this' length.
+- Preserve the tone and natural spoken style.
+- Preserve '\\n' line breaks.
+"""
+
+    print(f"[italic yellow]{system_prompt}")
+
+    translated_subtitles: list[SrtSubtitle] = []
+
+    for idx in track(
+        range(0, len(srt_data.subtitles), chunk_size), description="Translating…"
+    ):
+        context_before_chunk = srt_data.subtitles[max(idx - context_size, 0) : idx]
+        current_chunk: list[SrtSubtitle] = srt_data.subtitles[idx : idx + chunk_size]
+        context_after_chunk = srt_data.subtitles[
+            idx + chunk_size : min(
+                idx + chunk_size + context_size, len(srt_data.subtitles)
+            )
+        ]
+
+        context_before_lines: str = "\n".join(
+            map(lambda s: s.get_full_text(), context_before_chunk)
+        )
+        context_after_lines: str = "\n".join(
+            map(lambda s: s.get_full_text(), context_after_chunk)
+        )
+
+        prompt = json.dumps(
+            {
+                "context_before": context_before_lines,
+                "translate_this": list(map(lambda s: s.get_full_text(), current_chunk)),
+                "context_after": context_after_lines,
+            }
+        )
+        print(prompt)
+
+        if args.use_local_models:
+            output = ollama_chat(
+                system_prompt=system_prompt,
+                message=prompt,
+                model=args.model,
+                response_format=None,
+            )
+        else:
+            output = openrouter_chat(
+                system_prompt=system_prompt,
+                message=prompt,
+                model=args.model,
+                session_id=session_id,
+                response_format={"type": "json_object"},
+            )
+
+        print(output)
+
+        groups: list[str] = json.loads(output).get("translations")
+
+        if len(groups) is not chunk_size:
+            print("[black on red]RETRY")
+            idx -= chunk_size
+            continue
+
+        for og_subtitle, translated_group in zip(current_chunk, groups):
+            translated_subtitles.append(
+                SrtSubtitle(
+                    order=og_subtitle.order,
+                    timestamp=og_subtitle.timestamp,
+                    content=translated_group.splitlines(),
+                )
+            )
+
+    return SrtData(subtitles=translated_subtitles)
+
+
 def translate_by_line(
     srt_data: SrtData, movie_info: MovieInfo, args: AsomnapisyArgs
 ) -> SrtData:
+    session_id = f"asomnapisy_{slugify(movie_info.title)}_{str(uuid.uuid4())}"
+
     translated_subtitles: list[SrtSubtitle] = []
 
     for idx in track(range(len(srt_data.subtitles)), description="Translating…"):
@@ -94,11 +206,28 @@ def translate_by_line(
                 surrounding_context_len=5,
             )
         )
+        
+
+        print(system_prompt)
 
         text_to_translate = "\n".join(subtitle.content)
         print(f"[white on dark_blue]{text_to_translate}")
 
-        output = ollama_chat(system_prompt, text_to_translate, args.model)
+        if args.use_local_models:
+            output = ollama_chat(
+                system_prompt=system_prompt,
+                message=text_to_translate,
+                model=args.model,
+                response_format=None,
+            )
+        else:
+            output = openrouter_chat(
+                system_prompt=system_prompt,
+                message=text_to_translate,
+                model=args.model,
+                session_id=session_id,
+                response_format={"type": "json_object"},
+            )
         print(f"[black on gold1]{output}\n")
 
         translated_subtitles.append(
@@ -106,47 +235,6 @@ def translate_by_line(
                 order=subtitle.order,
                 timestamp=subtitle.timestamp,
                 content=output.splitlines(),
-            )
-        )
-
-    return SrtData(subtitles=translated_subtitles)
-
-
-def translate_full(
-    srt_data: SrtData, movie_info: MovieInfo, args: AsomnapisyArgs
-) -> SrtData:
-    prompt = translate_movie_prompt_full_subtitiles_full_response(
-        movie_info, args.source_lang, args.target_lang, srt_data
-    )
-
-    output = openrouter_chat(system_prompt=None, message=prompt, model=args.model)
-    with open("llm_response.txt", "w") as f:
-        _ = f.write(output)
-    # with open("llm_response.txt", "r") as f:
-    #     output = f.read()
-
-    output_lines = output.splitlines()
-
-    # Check if LLM was _intelligent_ enough to follow the instructions.
-    output_line_count = len(output_lines)
-    original_line_count = len(srt_data.get_full_text().splitlines())
-    assert(original_line_count == output_line_count)
-
-    print(original_line_count, output_line_count)
-
-    translated_subtitles: list[SrtSubtitle] = []
-    current_line_idx = 0
-
-    for subtitle in srt_data.subtitles:
-        translated_content: list[str] = []
-        for _ in subtitle.content:
-            translated_content.append(output_lines[current_line_idx])
-            current_line_idx += 1
-        translated_subtitles.append(
-            SrtSubtitle(
-                order=subtitle.order,
-                timestamp=subtitle.timestamp,
-                content=translated_content,
             )
         )
 
@@ -250,31 +338,65 @@ def enrich_movie_info_with_description(movie_info: MovieInfo) -> MovieInfo:
         return movie_info
 
 
-def ollama_chat(system_prompt: str | None, message: str, model: str | None) -> str:
+def ollama_chat(
+    system_prompt: str | None,
+    message: str,
+    model: str | None,
+    response_format: object | None,
+) -> str:
     url = "http://localhost:11434/v1/chat/completions"
     model = model if model is not None else "gemma4:31b"
-    return openai_chat(system_prompt, message, model, url, api_key=None)
+    return openai_chat(
+        system_prompt,
+        message,
+        model,
+        url,
+        api_key=None,
+        session_id=None,
+        response_format=response_format,
+    )
 
 
-def openrouter_chat(system_prompt: str | None, message: str, model: str | None) -> str:
+def openrouter_chat(
+    system_prompt: str | None,
+    message: str,
+    model: str | None,
+    session_id: str | None,
+    response_format: object | None,
+) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     model = model if model is not None else "google/gemini-2.5-pro"
     api_key = os.environ["OPENROUTER_KEY"]
-    return openai_chat(system_prompt, message, model, url, api_key)
+    return openai_chat(
+        system_prompt, message, model, url, api_key, session_id, response_format
+    )
 
 
 def openai_chat(
-    system_prompt: str | None, message: str, model: str, url: str, api_key: str | None
+    system_prompt: str | None,
+    message: str,
+    model: str,
+    url: str,
+    api_key: str | None,
+    session_id: str | None,
+    response_format: object | None,
 ) -> str:
     messages: list[object] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": message})
 
-    data = {
+    data: dict[str, Any] = {
         "model": model,
         "messages": messages,
     }
+
+    if session_id is not None:
+        data["session_id"] = session_id
+
+    if response_format is not None:
+        data["response_format"] = response_format
+
     headers = {}
     if api_key is not None:
         headers = {"Authorization": f"Bearer {api_key}"}
@@ -333,44 +455,6 @@ I will now provide the lines that you need to translate. Remember that they're a
     """.strip()
 
 
-def translate_movie_prompt_full_subtitiles_full_response(
-    movie_info: MovieInfo,
-    source_lang: str,
-    target_lang: str,
-    srt_data: SrtData,
-) -> str:
-    release_year_text = f" released in {movie_info.year}" if movie_info.year else ""
-
-    description_text = (
-        f"""
-For more context this is the description of the movie:
-```
-{movie_info.description}
-```
-    """.strip()
-        if movie_info.description
-        else ""
-    )
-
-    original_lines = srt_data.get_full_text()
-
-    return f"""
-You are a professional translator and the movie expert. You are going to translate movie subtitles.
-The movie we're translating is "{movie_info.title}"{release_year_text}.
-{description_text}
-You will be translating from {source_lang} to {target_lang}. 
-Preserve the meaning, tone, and natural spoken style. 
-I will provide you with all subtitles for the movie. Translate them.
-Subtitles fill be divided into groups. Each group is separated by one empty line. Respect groups in translated output. Keep each translated line in its corresponding group. The groups are for processing only. For the purpose of translation tjreat the subtitles as single body of text.
-Sometimes there are new lines in the middle of sentence. They're required to correctly fit subtitles on the display. New lines don't mean anything. Treat those sentences as one sentence. Only full stop/period mean "end of sentence". Preserve new lines.
-Return only the translated subtitles and nothing else - THIS IS VERY IMPORTANT.
-Full movie subtitles:
-```
-{original_lines}
-```
-    """.strip()
-
-
 def parse_args() -> AsomnapisyArgs:
     parser = argparse.ArgumentParser(
         prog="asomnapisy",
@@ -391,9 +475,19 @@ def parse_args() -> AsomnapisyArgs:
         "srt_file_path", help="path to srt file to translate.", type=str
     )
     _ = parser.add_argument(
+        "--mode",
+        help="translation mode.",  # TODO: List all modes.
+        type=str,
+    )
+    _ = parser.add_argument(
         "--model",
         help="name of the LLM that will be used for translation.",
         type=str,
+    )
+    _ = parser.add_argument(
+        "--local-model",
+        help="use local model via ollama.",
+        action=argparse.BooleanOptionalAction,
     )
 
     args = parser.parse_args()
@@ -401,7 +495,9 @@ def parse_args() -> AsomnapisyArgs:
         source_lang=args.source_lang,
         target_lang=args.target_lang,
         srt_file_path=args.srt_file_path,
+        mode=args.mode,
         model=args.model,
+        use_local_models=args.local_model or False,
     )
 
 
@@ -415,6 +511,12 @@ T = TypeVar("T")
 
 def flatten(xss: list[list[T]]) -> list[T]:
     return [x for xs in xss for x in xs]
+
+
+def slugify(text: str) -> str:
+    return "".join(
+        filter(lambda s: s.isalnum(), text.encode("ascii", "ignore").decode("ascii"))
+    )
 
 
 if __name__ == "__main__":
