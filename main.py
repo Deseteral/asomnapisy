@@ -22,6 +22,7 @@ class AsomnapisyArgs:
     mode: str | None
     model: str | None
     use_local_models: bool
+    concurrent: int
 
 
 @dataclass
@@ -206,7 +207,6 @@ def translate_by_line(
                 surrounding_context_len=5,
             )
         )
-        
 
         print(system_prompt)
 
@@ -489,6 +489,11 @@ def parse_args() -> AsomnapisyArgs:
         help="use local model via ollama.",
         action=argparse.BooleanOptionalAction,
     )
+    _ = parser.add_argument(
+        "--concurrent",
+        help="the amount of concurrent requests to LLMs (1 by default).",
+        type=int,
+    )
 
     args = parser.parse_args()
     return AsomnapisyArgs(
@@ -498,6 +503,7 @@ def parse_args() -> AsomnapisyArgs:
         mode=args.mode,
         model=args.model,
         use_local_models=args.local_model or False,
+        concurrent=args.concurrent or 1,
     )
 
 
