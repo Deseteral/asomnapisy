@@ -13,6 +13,7 @@ struct asomnapisyApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .navigationTitle("asomnapisy")
         }
     }
 }
