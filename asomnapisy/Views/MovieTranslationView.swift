@@ -44,7 +44,12 @@ struct MovieTranslationView: View {
             } label: { Label("Source subtitles", systemImage: "text.bubble") }
 
             GroupBox {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        LLMProviderPickerView()
+                        TranslationModePickerView()
+                    }
+
                     HStack {
                         LanguagePickerView(label: "")
                         Image(systemName: "arrowshape.right")
