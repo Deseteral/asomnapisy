@@ -15,5 +15,6 @@ struct asomnapisyApp: App {
             ContentView()
                 .navigationTitle("asomnapisy")
         }
+        .windowResizability(.contentSize)
     }
 }
