@@ -16,10 +16,9 @@ class ViewModel {
     var llmProvider: LLMProvider = .ollama
     var translationMode: TranslationMode = .lineByLine
 
-    // TODO: Check if source lang and target lang are the same.
-    // TODO: Set target lang in user preferences.
-    var sourceLanguage: Language = Language(id: "en", name: "English")
-    var targetLanguage: Language = Language(id: "en", name: "English")
+    // TODO: Check if source language and target lang are the same.
+    // TODO: Detect source language from srt file name.
+    var sourceLanguage: Language = Language.init(rawValue: "en")!
 
     var concurrency = 1
     let concurrencyRange = 1...9
