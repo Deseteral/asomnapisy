@@ -3,7 +3,12 @@ import SwiftUI
 
 @Observable
 class ViewModel {
-    var subtitleFilePath: URL? = nil
+    var subtitleFilePath: URL? = nil {
+        didSet {
+            guard let subtitleFilePath = subtitleFilePath else { return }
+            populateMovieDetails(from: subtitleFilePath)
+        }
+    }
 
     var tmdbId: String = ""
     var movieTitle: String = ""
@@ -40,6 +45,12 @@ class ViewModel {
 
     func translate() {
         print("TODO")
+    }
+
+    private func populateMovieDetails(from subtitleFilePath: URL) {
+        let path = subtitleFilePath.path
+        print("populate movie details")
+        print(path)
     }
 }
 

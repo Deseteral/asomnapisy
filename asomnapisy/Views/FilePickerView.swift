@@ -3,25 +3,23 @@ import SwiftUI
 struct FilePickerView: View {
     @Binding var selectedFile: URL?
 
+    @State private var selectedFilePath: String = ""
     @State private var isPresented = false
 
-    private var selectedFilePath: Binding<String> {
-        Binding {
-            if let url = selectedFile {
-                return url.path
-            } else {
-                return ""
-            }
-        } set: { updatedFilePath in
-            selectedFile = URL.init(string: updatedFilePath)
-        }
-    }
-
+    @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
         HStack {
-            TextField("Subtitle file path", text: selectedFilePath)
+            TextField("Subtitle file path", text: $selectedFilePath)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                .focused($isTextFieldFocused)
+                .onChange(of: isTextFieldFocused) {
+                    if isTextFieldFocused { return }
+                    let newUrlValue = URL.init(string: selectedFilePath)
+                    if newUrlValue?.path != selectedFile?.path {
+                        selectedFile = newUrlValue
+                    }
+                }
 
             Button("Select File") {
                 isPresented = true
@@ -35,7 +33,10 @@ struct FilePickerView: View {
             switch result {
                 case .success(let url):
                     selectedFile = url.first
+                    selectedFilePath = selectedFile?.path ?? ""
                 case .failure(let error):
+                    selectedFile = nil
+                    selectedFilePath = ""
                     // TODO: This should be presented to the user.
                     print("Error: \(error.localizedDescription)")
             }
