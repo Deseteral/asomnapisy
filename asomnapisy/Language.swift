@@ -1,12 +1,28 @@
 import Foundation
 
-struct Language: Identifiable, Hashable {
+struct Language: Identifiable, Hashable, RawRepresentable {
     let id: String
     let name: String
+
+    var rawValue: String { id }
+
+    init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+
+    init?(rawValue: String) {
+        guard let found = (Language.allLanguages.first { lang in rawValue == lang.id }) else {
+            return nil
+        }
+        self = found
+    }
 }
 
 extension Language {
-    static var allLanguages: [Language] {
+    static let allLanguages: [Language] = getAllLanguages()
+
+    static private func getAllLanguages() -> [Language] {
         let currentLocale = Locale.current
 
         return Locale.LanguageCode.isoLanguageCodes.compactMap { code in
