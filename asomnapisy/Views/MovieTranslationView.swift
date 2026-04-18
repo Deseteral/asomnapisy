@@ -1,14 +1,14 @@
 import SwiftUI
 
 struct MovieTranslationView: View {
-    @State private var viewModel = ViewModel()
+    @State private var vm = MovieTranslationViewModel()
     @AppStorage("defaultTargetLangauge") private var targetLanguage: Language = Language.init(rawValue: "en")!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
                 VStack {
-                    FilePickerView(selectedFile: $viewModel.subtitleFilePath)
+                    FilePickerView(selectedFile: $vm.subtitleFilePath)
 
                     Divider()
 
@@ -18,19 +18,19 @@ struct MovieTranslationView: View {
                                 .fontWeight(.bold)
 
                             HStack {
-                                TextField("TMDB ID", text: $viewModel.tmdbId)
+                                TextField("TMDB ID", text: $vm.tmdbId)
                                 Button("Fetch data") {
-                                    viewModel.fetchMovieData()
+                                    vm.fetchMovieData()
                                 }
-                                .disabled(viewModel.isFetchMovieDetailsButtonDisabled)
+                                .disabled(vm.isFetchMovieDetailsButtonDisabled)
                             }
-                            TextField("Title", text: $viewModel.movieTitle)
-                            TextField("Release year", text: $viewModel.movieReleaseYear)
-                            TextField("Description", text: $viewModel.movieDescription, axis: .vertical)
+                            TextField("Title", text: $vm.movieTitle)
+                            TextField("Release year", text: $vm.movieReleaseYear)
+                            TextField("Description", text: $vm.movieDescription, axis: .vertical)
                                 .lineLimit(5, reservesSpace: true)
                         }
 
-                        AsyncImage(url: URL(string: viewModel.moviePosterUrl)) { image in
+                        AsyncImage(url: URL(string: vm.moviePosterUrl)) { image in
                             image.resizable().scaledToFit()
                         } placeholder: {
                             Color.gray
@@ -45,12 +45,12 @@ struct MovieTranslationView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        LLMProviderPickerView(selectedProvider: $viewModel.llmProvider)
-                        TranslationModePickerView(selectedMode: $viewModel.translationMode)
+                        LLMProviderPickerView(selectedProvider: $vm.llmProvider)
+                        TranslationModePickerView(selectedMode: $vm.translationMode)
                     }
 
                     HStack {
-                        LanguagePickerView(label: nil, selectedLanguage: $viewModel.sourceLanguage)
+                        LanguagePickerView(label: nil, selectedLanguage: $vm.sourceLanguage)
                             .frame(width: 150)
                         Image(systemName: "arrowshape.right")
                         LanguagePickerView(label: nil, selectedLanguage: $targetLanguage)
@@ -63,7 +63,7 @@ struct MovieTranslationView: View {
 
             GroupBox {
                 VStack(alignment: .leading) {
-                    Stepper("Concurrency: \(viewModel.concurrency)", value: $viewModel.concurrency, in: viewModel.concurrencyRange)
+                    Stepper("Concurrency: \(vm.concurrency)", value: $vm.concurrency, in: vm.concurrencyRange)
                         .monospacedDigit()
                 }
                 .padding()
@@ -79,10 +79,10 @@ struct MovieTranslationView: View {
 //                Divider()
 
                 Button("Translate", role: .destructive) {
-                    viewModel.translate()
+                    vm.translate()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isTranslateButtonDisabled)
+                .disabled(vm.isTranslateButtonDisabled)
             }
             .frame(maxWidth: .infinity, alignment: .bottomTrailing)
         }

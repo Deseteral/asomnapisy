@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 @Observable
-class ViewModel {
+class MovieTranslationViewModel {
     var subtitleFilePath: URL? = nil {
         didSet { populateMovieDetails(from: subtitleFilePath) }
     }
