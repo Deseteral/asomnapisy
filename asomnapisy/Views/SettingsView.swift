@@ -4,15 +4,25 @@ struct SettingsView: View {
     @AppStorage("defaultTargetLangauge") private var defaultTargetLangauge: Language = Language.init(rawValue: "en")!
     @SecureStorage("tmdbAccessToken") private var tmdbAccessToken: String = ""
     @SecureStorage("openRouterKey") private var openRouterKey: String = ""
+    @AppStorage("ollamaInstanceUrl") private var ollamaInstanceUrl: String = ""
 
     var body: some View {
         Form {
-            LanguagePickerView(label: "Default target language", selectedLanguage: $defaultTargetLangauge)
-            SecureField("TMDB access token", text: $tmdbAccessToken)
-            SecureField("OpenRouter key", text: $openRouterKey)
+            Section("Translation") {
+                LanguagePickerView(label: "Default target language", selectedLanguage: $defaultTargetLangauge)
+            }
+
+            Section("Media sources") {
+                SecureField("TMDB access token", text: $tmdbAccessToken)
+            }
+
+            Section("LLM providers") {
+                TextField("Ollama instance URL", text: $ollamaInstanceUrl)
+                SecureField("OpenRouter key", text: $openRouterKey)
+            }
         }
         .scenePadding()
-        .frame(maxWidth: 350, minHeight: 100)
+        .frame(maxWidth: 450, minHeight: 100)
     }
 }
 
