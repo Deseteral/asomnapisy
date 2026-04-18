@@ -19,7 +19,7 @@ struct MovieTranslationView: View {
                             HStack {
                                 TextField("TMDB ID", text: $viewModel.tmdbId)
                                 Button("Fetch data") {
-                                    print("TODO")
+                                    viewModel.fetchMovieData()
                                 }
                                 .disabled(viewModel.isFetchMovieDetailsButtonDisabled)
                             }
@@ -76,9 +76,10 @@ struct MovieTranslationView: View {
 //                Divider()
 
                 Button("Translate", role: .destructive) {
-                    print("TODO translate!")
+                    viewModel.translate()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isTranslateButtonDisabled)
             }
             .frame(maxWidth: .infinity, alignment: .bottomTrailing)
         }

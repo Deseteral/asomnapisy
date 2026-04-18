@@ -27,5 +27,19 @@ class ViewModel {
             return tmdbId.isEmpty
         }
     }
+
+    var isTranslateButtonDisabled: Bool {
+        get {
+            return subtitleFilePath == nil || movieTitle.isEmpty
+        }
+    }
+
+    func fetchMovieData() {
+        print("TODO")
+    }
+
+    func translate() {
+        print("TODO")
+    }
 }
 
