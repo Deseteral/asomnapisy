@@ -1,16 +1,15 @@
 import SwiftUI
 
 struct MovieTranslationView: View {
+    @State private var viewModel = ViewModel()
 
     @State private var concurrency = 1
-
-    @State private var tmdbId = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
                 VStack {
-                    FilePickerView()
+                    FilePickerView(selectedFile: $viewModel.subtitleFilePath)
 
                     Divider()
 
@@ -20,23 +19,24 @@ struct MovieTranslationView: View {
                                 .fontWeight(.bold)
 
                             HStack {
-                                TextField("TMDB ID", text: $tmdbId)
+                                TextField("TMDB ID", text: $viewModel.tmdbId)
                                 Button("Fetch data") {
-                                    print("")
+                                    print("TODO")
                                 }
-                                .disabled(tmdbId.isEmpty)
+                                .disabled(viewModel.isFetchMovieDetailsButtonDisabled)
                             }
-                            TextField("Movie title", text: $tmdbId)
-                            TextField("Release year", text: $tmdbId)
+                            TextField("Title", text: $viewModel.movieTitle)
+                            TextField("Release year", text: $viewModel.movieReleaseYear)
+                            TextField("Description", text: $viewModel.movieDescription, axis: .vertical)
+                                .lineLimit(5, reservesSpace: true)
                         }
 
-                        AsyncImage(url: URL(string: "https://image.tmdb.org/t/p/w1280/yihdXomYb5kTeSivtFndMy5iDmf.jpg")) { image in
-                            image.resizable()
-                                .scaledToFit()
+                        AsyncImage(url: URL(string: viewModel.moviePosterUrl)) { image in
+                            image.resizable().scaledToFit()
                         } placeholder: {
                             Color.gray
                         }
-                        .frame(width: 133, height: 200)
+                        .frame(width: 130, height: 196)
                     }
                 }
                 .padding()
@@ -51,9 +51,9 @@ struct MovieTranslationView: View {
                     }
 
                     HStack {
-                        LanguagePickerView(label: "")
+                        LanguagePickerView()
                         Image(systemName: "arrowshape.right")
-                        LanguagePickerView(label: "")
+                        LanguagePickerView()
                     }
                 }
                 .padding()
@@ -75,9 +75,9 @@ struct MovieTranslationView: View {
             Spacer()
 
             HStack {
-                Text("Estimated token count: 123K (input), 456K (output).")
+                Text("Estimated token count: 123K (input), 456K (output)")
                 Divider()
-                Text("Estimated cost: $6.45.")
+                Text("Estimated cost: $6.45")
 
                 Divider()
 

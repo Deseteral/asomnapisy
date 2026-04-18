@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct FilePickerView: View {
+    @Binding var selectedFile: URL?
+
     @State private var isPresented = false
-    @State private var selectedFile: URL? = nil
 
     private var selectedFilePath: Binding<String> {
         Binding {
@@ -40,8 +41,4 @@ struct FilePickerView: View {
             }
         }
     }
-}
-
-#Preview {
-    FilePickerView()
 }
