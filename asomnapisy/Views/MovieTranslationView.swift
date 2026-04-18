@@ -49,9 +49,11 @@ struct MovieTranslationView: View {
                     }
 
                     HStack {
-                        LanguagePickerView(selectedLanguage: $viewModel.sourceLanguage)
+                        LanguagePickerView(label: nil, selectedLanguage: $viewModel.sourceLanguage)
+                            .frame(width: 150)
                         Image(systemName: "arrowshape.right")
-                        LanguagePickerView(selectedLanguage: $viewModel.targetLanguage)
+                        LanguagePickerView(label: nil, selectedLanguage: $targetLanguage)
+                            .frame(width: 150)
                     }
                 }
                 .padding()
