@@ -3,8 +3,6 @@ import SwiftUI
 struct MovieTranslationView: View {
     @State private var viewModel = ViewModel()
 
-    @State private var concurrency = 1
-
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
@@ -46,14 +44,14 @@ struct MovieTranslationView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        LLMProviderPickerView()
-                        TranslationModePickerView()
+                        LLMProviderPickerView(selectedProvider: $viewModel.llmProvider)
+                        TranslationModePickerView(selectedMode: $viewModel.translationMode)
                     }
 
                     HStack {
-                        LanguagePickerView()
+                        LanguagePickerView(selectedLanguage: $viewModel.sourceLanguage)
                         Image(systemName: "arrowshape.right")
-                        LanguagePickerView()
+                        LanguagePickerView(selectedLanguage: $viewModel.targetLanguage)
                     }
                 }
                 .padding()
@@ -62,11 +60,8 @@ struct MovieTranslationView: View {
 
             GroupBox {
                 VStack(alignment: .leading) {
-                    Stepper(onIncrement: {
-                        concurrency = min(concurrency + 1, 9)
-                    }, onDecrement: {
-                        concurrency = max(concurrency - 1, 1)
-                    }, label: { Text("Concurrency: \(concurrency)").monospacedDigit() })
+                    Stepper("Concurrency: \(viewModel.concurrency)", value: $viewModel.concurrency, in: viewModel.concurrencyRange)
+                        .monospacedDigit()
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -75,11 +70,10 @@ struct MovieTranslationView: View {
             Spacer()
 
             HStack {
-                Text("Estimated token count: 123K (input), 456K (output)")
-                Divider()
-                Text("Estimated cost: $6.45")
-
-                Divider()
+//                Text("Estimated token count: 123K (input), 456K (output)")
+//                Divider()
+//                Text("Estimated cost: $6.45")
+//                Divider()
 
                 Button("Translate", role: .destructive) {
                     print("TODO translate!")
@@ -92,9 +86,6 @@ struct MovieTranslationView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
-
-// TODO: Check if source lang and target lang are the same.
-// TODO: Set target lang in user preferences.
 
 #Preview {
     MovieTranslationView()

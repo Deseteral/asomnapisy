@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TranslationModePickerView: View {
-    @State private var selectedMode: TranslationMode = .lineByLine
+    @Binding var selectedMode: TranslationMode
 
     var body: some View {
         Picker("Translation mode", selection: $selectedMode) {
@@ -11,8 +11,4 @@ struct TranslationModePickerView: View {
         }
         .pickerStyle(.menu)
     }
-}
-
-#Preview {
-    TranslationModePickerView()
 }

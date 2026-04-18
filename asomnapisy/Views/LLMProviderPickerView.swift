@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LLMProviderPickerView: View {
-    @State private var selectedProvider: LLMProvider = .ollama
+    @Binding var selectedProvider: LLMProvider
 
     var body: some View {
         Picker("LLM provider", selection: $selectedProvider) {
@@ -11,8 +11,4 @@ struct LLMProviderPickerView: View {
         }
         .pickerStyle(.menu)
     }
-}
-
-#Preview {
-    LLMProviderPickerView()
 }
