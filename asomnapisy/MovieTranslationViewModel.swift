@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 
+@MainActor
 @Observable
 class MovieTranslationViewModel {
     var subtitleFilePath: URL? = nil {
@@ -32,7 +33,14 @@ class MovieTranslationViewModel {
     }
 
     func fetchMovieData() {
-        print("TODO")
+        Task {
+            let client = TMDBClient()
+            guard let details = await client.getMovieDetails(by: tmdbId) else { return }
+            movieTitle = details.title
+            movieReleaseYear = details.releaseYear
+            movieDescription = details.description
+            moviePosterUrl = details.posterUrl
+        }
     }
 
     func translate() {

@@ -57,7 +57,7 @@ struct SecureStorage: DynamicProperty {
         }
     }
 
-    static private func read(_ key: String) -> String? {
+    static func read(_ key: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
