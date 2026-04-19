@@ -7,21 +7,32 @@ struct TranslateMovieLineByLine {
     let targetLanguage: Language
     let concurrency: Int
     let llmClient: OpenAI
-    let llmModel: Model
+    let llmIdentifier: String
 }
 
-func translateMovieLineByLine(data: TranslateMovieLineByLine) -> SrtData {
-    let translatedSubtitles = data.srtData.subtitles.enumerated().map { (idx, subtitle) in
+func translateMovieLineByLine(data: TranslateMovieLineByLine) async throws -> SrtData {
+    var translatedSubtitles: [SrtSubtitle] = []
+
+    for (idx, subtitle) in data.srtData.subtitles.enumerated() {
         let systemPrompt = systemPrompt(data: data, currentSubtitleIdx: idx, surroundingContextLength: 5)
         let textToTranslate = subtitle.content.joined(separator: "\n")
 
-        let output = "" // TODO: Hook up LLM here.
+        let messages: [ChatQuery.ChatCompletionMessageParam] = [
+            .system(.init(content: .textContent(systemPrompt))),
+            .user(.init(content: .string(textToTranslate)))
+        ]
 
-        return SrtSubtitle(
+        let query = ChatQuery(messages: messages, model: data.llmIdentifier)
+        let result = try await data.llmClient.chats(query: query)
+        let output = result.choices.first?.message.content ?? ""
+
+        print(output)
+
+        translatedSubtitles.append(SrtSubtitle(
             order: subtitle.order,
             timestamp: subtitle.timestamp,
             content: output.split(separator: "\n").map(String.init)
-        )
+        ))
     }
 
     return SrtData(subtitles: translatedSubtitles)
