@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OpenAI
 
 @MainActor
 @Observable
@@ -43,8 +44,18 @@ class MovieTranslationViewModel {
         }
     }
 
-    func translate() {
-        print("TODO")
+    func translate(targetLanguage: Language) async throws {
+        guard let subtitleFilePath = subtitleFilePath else { return }
+
+        guard let srtData = SrtData.init(contentsOf: subtitleFilePath) else { return }
+        let movieDetails = MovieDetails(id: tmdbId, title: movieTitle, releaseYear: movieReleaseYear, description: movieDescription, posterUrl: moviePosterUrl)
+
+        let client = OpenAI(configuration: .init(token: "ollama", host: "localhost", port: 11434, scheme: "http", basePath: "v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
+        let model = "llama3.1:8b"
+
+        let data = TranslateMovieLineByLine(srtData: srtData, movieDetails: movieDetails, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage, concurrency: 1, llmClient: client, llmIdentifier: model)
+        let output = try await translateMovieLineByLine(data: data)
+        print(output)
     }
 
     private func populateMovieDetails(from subtitleFilePath: URL?) {

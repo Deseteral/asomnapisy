@@ -79,7 +79,9 @@ struct MovieTranslationView: View {
 //                Divider()
 
                 Button("Translate", role: .destructive) {
-                    vm.translate()
+                    Task {
+                        try await vm.translate(targetLanguage: targetLanguage)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(vm.isTranslateButtonDisabled)
