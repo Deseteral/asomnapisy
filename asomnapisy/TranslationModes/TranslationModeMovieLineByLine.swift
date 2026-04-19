@@ -47,7 +47,7 @@ fileprivate func systemPrompt(data: TranslateMovieLineByLine, currentSubtitleIdx
         )
     }
 
-    let originalLines = data.srtData.subtitles[ogStart...ogEnd].flatMap { $0.content }.joined(separator: "\n")
+    let originalLines = data.srtData.subtitles[ogStart..<ogEnd].flatMap { $0.content }.joined(separator: "\n")
 
     return """
         You are a professional translator and the movie expert. You are going to translate movie subtitles.
