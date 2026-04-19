@@ -18,19 +18,19 @@ struct MovieTranslationView: View {
                                 .fontWeight(.bold)
 
                             HStack {
-                                TextField("TMDB ID", text: $vm.tmdbId)
+                                TextField("TMDB ID", text: $vm.movieDetails.id)
                                 Button("Fetch data") {
                                     vm.fetchMovieData()
                                 }
                                 .disabled(vm.isFetchMovieDetailsButtonDisabled)
                             }
-                            TextField("Title", text: $vm.movieTitle)
-                            TextField("Release year", text: $vm.movieReleaseYear)
-                            TextField("Description", text: $vm.movieDescription, axis: .vertical)
+                            TextField("Title", text: $vm.movieDetails.title)
+                            TextField("Release year", text: $vm.movieDetails.releaseYear)
+                            TextField("Description", text: $vm.movieDetails.description, axis: .vertical)
                                 .lineLimit(5, reservesSpace: true)
                         }
 
-                        AsyncImage(url: URL(string: vm.moviePosterUrl)) { image in
+                        AsyncImage(url: URL(string: vm.movieDetails.posterUrl)) { image in
                             image.resizable().scaledToFit()
                         } placeholder: {
                             Color.gray

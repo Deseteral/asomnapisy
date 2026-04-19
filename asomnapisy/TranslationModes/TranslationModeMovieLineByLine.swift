@@ -39,12 +39,12 @@ func translateMovieLineByLine(data: TranslateMovieLineByLine) async throws -> Sr
 }
 
 fileprivate func systemPrompt(data: TranslateMovieLineByLine, currentSubtitleIdx: Int, surroundingContextLength: Int) -> String {
-    let releaseYearText = if let year = data.movieDetails.releaseYear { " released in \(year)" } else { "" }
-    let descriptionText = if let description = data.movieDetails.description {
+    let releaseYearText = if !data.movieDetails.releaseYear.isEmpty { " released in \(data.movieDetails.releaseYear)" } else { "" }
+    let descriptionText = if !data.movieDetails.description.isEmpty {
         """
         For more context this is the description of the movie:
         ```
-        \(description)
+        \(data.movieDetails.description)
         ```
         """
     } else { "" }

@@ -1,11 +1,15 @@
 import Foundation
 
 struct MovieDetails: Identifiable {
-    let id: String
-    let title: String
-    let releaseYear: String?
-    let description: String?
-    let posterUrl: String?
+    var id: String
+    var title: String
+    var releaseYear: String
+    var description: String
+    var posterUrl: String
+
+    static func empty() -> MovieDetails {
+        return MovieDetails(id: "", title: "", releaseYear: "", description: "", posterUrl: "")
+    }
 }
 
 class TMDBClient {
@@ -37,11 +41,11 @@ class TMDBClient {
 
             let title = json["original_title"] as? String ?? ""
             let releaseDate = json["release_date"] as? String
-            let overview = json["overview"] as? String
+            let overview = json["overview"] as? String ?? ""
             let posterPath = json["poster_path"] as? String
 
-            let releaseYear: String? = releaseDate?.split(separator: "-").first.map(String.init)
-            let posterUrl: String? = if let posterPath = posterPath { "https://image.tmdb.org/t/p/w200\(posterPath)" } else { nil }
+            let releaseYear: String = releaseDate?.split(separator: "-").first.map(String.init) ?? ""
+            let posterUrl: String = if let posterPath = posterPath { "https://image.tmdb.org/t/p/w200\(posterPath)" } else { "" }
 
             return MovieDetails(
                 id: tmdbId,

@@ -9,11 +9,7 @@ class MovieTranslationViewModel {
         didSet { populateMovieDetails(from: subtitleFilePath) }
     }
 
-    var tmdbId: String = ""
-    var movieTitle: String = ""
-    var movieReleaseYear: String = ""
-    var movieDescription: String = ""
-    var moviePosterUrl: String = ""
+    var movieDetails = MovieDetails.empty()
 
     var llmProvider: LLMProvider = .ollama
     var translationMode: TranslationMode = .lineByLine
@@ -26,21 +22,18 @@ class MovieTranslationViewModel {
     let concurrencyRange = 1...9
 
     var isFetchMovieDetailsButtonDisabled: Bool {
-        get { return tmdbId.isEmpty }
+        get { return movieDetails.id.isEmpty }
     }
 
     var isTranslateButtonDisabled: Bool {
-        get { return subtitleFilePath == nil || movieTitle.isEmpty }
+        get { return subtitleFilePath == nil || movieDetails.title.isEmpty }
     }
 
     func fetchMovieData() {
         Task {
             let client = TMDBClient()
-            guard let details = await client.getMovieDetails(by: tmdbId) else { return }
-            movieTitle = details.title
-            movieReleaseYear = details.releaseYear ?? ""
-            movieDescription = details.description ?? ""
-            moviePosterUrl = details.posterUrl ?? ""
+            guard let details = await client.getMovieDetails(by: movieDetails.id) else { return }
+            movieDetails = details
         }
     }
 
@@ -48,7 +41,6 @@ class MovieTranslationViewModel {
         guard let subtitleFilePath = subtitleFilePath else { return }
 
         guard let srtData = SrtData.init(contentsOf: subtitleFilePath) else { return }
-        let movieDetails = MovieDetails(id: tmdbId, title: movieTitle, releaseYear: movieReleaseYear, description: movieDescription, posterUrl: moviePosterUrl)
 
         let client = OpenAI(configuration: .init(token: "ollama", host: "localhost", port: 11434, scheme: "http", basePath: "v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
         let model = "llama3.1:8b"
@@ -60,20 +52,20 @@ class MovieTranslationViewModel {
 
     private func populateMovieDetails(from subtitleFilePath: URL?) {
         guard let filename = subtitleFilePath?.lastPathComponent else {
-            tmdbId = ""
-            movieTitle = ""
-            movieReleaseYear = ""
-            movieDescription = ""
-            moviePosterUrl = ""
+            movieDetails = MovieDetails.empty()
             return
         }
 
 
         let regex = /^(.*?)(?=\s*[\({]|\.[a-z]{2}\.srt$|\.srt$)(?:\s*\((?P<year>\d{4})\))?(?:\s*\{tmdb-(?P<tmdbId>\d+)\})?.*?\.(?:[a-z]{2}\.)?srt$/
         if let result = try? regex.wholeMatch(in: filename) {
-            movieTitle = String(result.output.1)
-            tmdbId = String(result.output.tmdbId ?? "")
-            movieReleaseYear = String(result.output.year ?? "")
+            movieDetails = MovieDetails(
+                id: String(result.output.tmdbId ?? ""),
+                title: String(result.output.1),
+                releaseYear: String(result.output.year ?? ""),
+                description: "",
+                posterUrl: "",
+            )
 
             fetchMovieData()
         }
