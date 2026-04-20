@@ -16,7 +16,7 @@ class MovieTranslationViewModel {
 
     // TODO: Check if source language and target lang are the same.
     // TODO: Detect source language from srt file name.
-    var sourceLanguage: Language = Language.init(rawValue: "en")!
+    var sourceLanguage: Language = Language.english
 
     var concurrency = 1
     let concurrencyRange = 1...9

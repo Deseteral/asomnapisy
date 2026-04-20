@@ -17,6 +17,12 @@ struct Language: Identifiable, Hashable, RawRepresentable {
         }
         self = found
     }
+
+    static var english: Language {
+        get {
+            return Language(id: "en", name: "English")
+        }
+    }
 }
 
 extension Language {

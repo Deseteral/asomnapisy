@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("defaultTargetLangauge") private var defaultTargetLangauge: Language = Language.init(rawValue: "en")!
+    @AppStorage("defaultTargetLangauge") private var defaultTargetLangauge: Language = Language.english
     @SecureStorage("tmdbAccessToken") private var tmdbAccessToken: String = ""
     @SecureStorage("openRouterKey") private var openRouterKey: String = ""
     @AppStorage("ollamaInstanceUrl") private var ollamaInstanceUrl: String = ""

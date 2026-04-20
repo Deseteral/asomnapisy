@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MovieTranslationView: View {
     @State private var vm = MovieTranslationViewModel()
-    @AppStorage("defaultTargetLangauge") private var targetLanguage: Language = Language.init(rawValue: "en")!
+    @AppStorage("defaultTargetLangauge") private var targetLanguage: Language = Language.english
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
