@@ -42,7 +42,7 @@ class MovieTranslationViewModel {
 
         guard let srtData = SrtData.init(contentsOf: subtitleFilePath) else { return }
 
-        let client = OpenAI(configuration: .init(token: "ollama", host: "localhost", port: 11434, scheme: "http", basePath: "v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
+        let client = llmProvider.getClient()
         let model = "llama3.1:8b"
 
         let data = TranslateMovieLineByLine(srtData: srtData, movieDetails: movieDetails, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage, concurrency: 1, llmClient: client, llmIdentifier: model)
