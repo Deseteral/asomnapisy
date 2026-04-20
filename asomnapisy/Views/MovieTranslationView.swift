@@ -20,7 +20,7 @@ struct MovieTranslationView: View {
                             HStack {
                                 TextField("TMDB ID", text: $vm.movieDetails.id)
                                 Button("Fetch data") {
-                                    vm.fetchMovieData()
+                                    onFetchMovieDataButtonPressed()
                                 }
                                 .disabled(vm.isFetchMovieDetailsButtonDisabled)
                             }
@@ -79,9 +79,7 @@ struct MovieTranslationView: View {
 //                Divider()
 
                 Button("Translate", role: .destructive) {
-                    Task {
-                        try await vm.translate(targetLanguage: targetLanguage)
-                    }
+                    onTranslateButtonPressed()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(vm.isTranslateButtonDisabled)
@@ -90,6 +88,18 @@ struct MovieTranslationView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    func onFetchMovieDataButtonPressed() {
+        Task {
+            await vm.fetchMovieData()
+        }
+    }
+
+    func onTranslateButtonPressed() {
+        Task {
+            try await vm.translate(targetLanguage: targetLanguage)
+        }
     }
 }
 

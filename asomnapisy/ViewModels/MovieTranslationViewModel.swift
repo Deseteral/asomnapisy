@@ -29,14 +29,13 @@ class MovieTranslationViewModel {
         get { return subtitleFilePath == nil || movieDetails.title.isEmpty }
     }
 
-    func fetchMovieData() {
-        Task {
-            let client = TMDBClient()
-            guard let details = await client.getMovieDetails(by: movieDetails.id) else { return }
+    func fetchMovieData() async {
+        if let details = await TMDBClient().getMovieDetails(by: movieDetails.id) {
             movieDetails = details
         }
     }
 
+    // TODO: This whole flow requires error handling.
     func translate(targetLanguage: Language) async throws {
         guard let subtitleFilePath = subtitleFilePath else { return }
 
@@ -56,7 +55,6 @@ class MovieTranslationViewModel {
             return
         }
 
-
         let regex = /^(.*?)(?=\s*[\({]|\.[a-z]{2}\.srt$|\.srt$)(?:\s*\((?P<year>\d{4})\))?(?:\s*\{tmdb-(?P<tmdbId>\d+)\})?.*?\.(?:[a-z]{2}\.)?srt$/
         if let result = try? regex.wholeMatch(in: filename) {
             movieDetails = MovieDetails(
@@ -67,7 +65,10 @@ class MovieTranslationViewModel {
                 posterUrl: "",
             )
 
-            fetchMovieData()
+            // Once we get basic data from the file name, go and fetch description and poster from TMDB.
+            Task {
+                await fetchMovieData()
+            }
         }
     }
 }
