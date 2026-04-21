@@ -7,18 +7,24 @@ struct SettingsView: View {
     @AppStorage("ollamaInstanceUrl") private var ollamaInstanceUrl: String = ""
 
     var body: some View {
-        Form {
-            Section("Translation") {
-                LanguagePickerView(label: "Default target language", selectedLanguage: $defaultTargetLangauge)
+        TabView {
+            Tab("Translation", systemImage: "translate") {
+                Form {
+                    LanguagePickerView(label: "Default target language", selectedLanguage: $defaultTargetLangauge)
+                }
             }
 
-            Section("Media sources") {
-                SecureField("TMDB access token", text: $tmdbAccessToken)
+            Tab("Media sources", systemImage: "book.closed.fill") {
+                Form {
+                    SecureField("TMDB access token", text: $tmdbAccessToken)
+                }
             }
 
-            Section("LLM providers") {
-                TextField("Ollama instance URL", text: $ollamaInstanceUrl)
-                SecureField("OpenRouter key", text: $openRouterKey)
+            Tab("LLM providers", systemImage: "sparkles") {
+                Form {
+                    TextField("Ollama instance URL", text: $ollamaInstanceUrl)
+                    SecureField("OpenRouter key", text: $openRouterKey)
+                }
             }
         }
         .scenePadding()
