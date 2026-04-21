@@ -40,16 +40,17 @@ struct MovieTranslationView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-            } label: { Label("Source subtitles", systemImage: "text.bubble") }
+            } label: { Label("Source", systemImage: "text.bubble") }
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        LLMProviderPickerView(selectedProvider: $vm.llmProvider)
                         TranslationModePickerView(selectedMode: $vm.translationMode)
+                        LLMProviderPickerView(selectedProvider: $vm.llmProvider)
                     }
 
                     HStack {
+                        Text("Language")
                         LanguagePickerView(label: nil, selectedLanguage: $vm.sourceLanguage)
                             .frame(width: 150)
                         Image(systemName: "arrowshape.right")
@@ -68,7 +69,7 @@ struct MovieTranslationView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-            } label: { Label("Advanced settings", systemImage: "bolt.fill") }
+            } label: { Label("Mode settings", systemImage: "pencil.line") }
 
             Spacer()
 

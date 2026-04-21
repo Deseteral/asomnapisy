@@ -27,6 +27,7 @@ extension LLMProvider {
                 guard let url = URL.init(string: instanceUrlString) else { return nil }
                 guard let scheme = url.scheme, let host = url.host(), let port = url.port else { return nil }
                 return OpenAI(configuration: .init(token: "ollama", host: host, port: port, scheme: scheme, basePath: "v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
+
             case .openrouter:
                 guard let key = SecureStorage.read("openRouterKey") else { return nil }
                 let customHeaders: [String: String] = [
