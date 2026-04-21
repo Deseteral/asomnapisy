@@ -1,3 +1,4 @@
+import Foundation
 import OpenAI
 
 enum LLMProvider: Identifiable, CaseIterable {
@@ -19,13 +20,13 @@ enum LLMProvider: Identifiable, CaseIterable {
 }
 
 extension LLMProvider {
-    func getClient() -> OpenAI {
+    func getClient() -> OpenAI? {
         switch self {
             case .ollama:
                 return OpenAI(configuration: .init(token: "ollama", host: "localhost", port: 11434, scheme: "http", basePath: "v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
             case .openrouter:
-                // TODO: Return correct OpenRouter configured client.
-                return OpenAI(configuration: .init(token: "ollama", host: "localhost", port: 11434, scheme: "http", basePath: "v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
+                guard let key = SecureStorage.read("openRouterKey") else { return nil }
+                return OpenAI(configuration: .init(token: key, host: "openrouter.ai",  scheme: "https", basePath: "api/v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
         }
     }
 }
