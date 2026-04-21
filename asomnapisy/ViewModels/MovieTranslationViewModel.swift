@@ -41,7 +41,8 @@ class MovieTranslationViewModel {
 
         guard let srtData = SrtData.init(contentsOf: subtitleFilePath) else { return }
 
-        guard let client = llmProvider.getClient() else { return }
+        let sessionId = "asomnapisy_\(subtitleFilePath.lastPathComponent.slugify)_\(Date.now.ISO8601Format())"
+        guard let client = llmProvider.getClient(sessionId: sessionId) else { return }
         let model = "llama3.1:8b"
 
         let data = TranslateMovieLineByLine(srtData: srtData, movieDetails: movieDetails, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage, concurrency: 1, llmClient: client, llmIdentifier: model)

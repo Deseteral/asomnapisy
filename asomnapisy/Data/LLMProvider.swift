@@ -20,7 +20,7 @@ enum LLMProvider: Identifiable, CaseIterable {
 }
 
 extension LLMProvider {
-    func getClient() -> OpenAI? {
+    func getClient(sessionId: String) -> OpenAI? {
         switch self {
             case .ollama:
                 guard let instanceUrlString = UserDefaults.standard.string(forKey: "ollamaInstanceUrl") else { return nil }
@@ -29,7 +29,10 @@ extension LLMProvider {
                 return OpenAI(configuration: .init(token: "ollama", host: host, port: port, scheme: scheme, basePath: "v1", parsingOptions: .fillRequiredFieldIfKeyNotFound))
             case .openrouter:
                 guard let key = SecureStorage.read("openRouterKey") else { return nil }
-                let customHeaders: [String : String] = ["X-OpenRouter-Title": "asomnapisy"]
+                let customHeaders: [String: String] = [
+                    "X-OpenRouter-Title": "asomnapisy",
+                    "X-Session-ID": sessionId,
+                ].compactMapValues { $0 }
                 return OpenAI(configuration: .init(token: key, host: "openrouter.ai",  scheme: "https", basePath: "api/v1", customHeaders: customHeaders, parsingOptions: .fillRequiredFieldIfKeyNotFound))
         }
     }
