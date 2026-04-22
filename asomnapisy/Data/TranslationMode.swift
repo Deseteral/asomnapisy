@@ -33,5 +33,7 @@ struct TranslateMovieLineByLineParams {
 }
 
 struct TranslateMovieChunkedParams {
-    let concurrency: Int = 1
+    var chunkSize: Int = 30
+    var contextSize: Int = 4
+    var maxRetries: Int = 3
 }

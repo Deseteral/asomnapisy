@@ -66,16 +66,9 @@ struct MovieTranslationView: View {
                 VStack(alignment: .leading) {
                     switch vm.translationMode {
                         case .lineByLine:
-                            Form {
-                                // TODO: Set concurrency range somewhere else.
-                                Stepper("Concurrency: \(vm.translateMovieLineByLineParams.concurrency)", value: $vm.translateMovieLineByLineParams.concurrency, in: 1...9)
-                                    .monospacedDigit()
-
-                                Stepper("Before/after lines (additional context): \(vm.translateMovieLineByLineParams.surroundingContextLength)", value: $vm.translateMovieLineByLineParams.surroundingContextLength, in: 1...Int.max)
-                                    .monospacedDigit()
-                            }
+                            LineByLineSettingsView(params: $vm.translateMovieLineByLineParams)
                         case .chunked:
-                            Text("chunked")
+                            ChunkedSettingsView(params: $vm.translateMovieChunkedParams)
                     }
                 }
                 .padding()
@@ -111,6 +104,38 @@ struct MovieTranslationView: View {
     func onTranslateButtonPressed() {
         Task {
             try await vm.translate(targetLanguage: targetLanguage)
+        }
+    }
+}
+
+fileprivate struct LineByLineSettingsView: View {
+    @Binding var params: TranslateMovieLineByLineParams
+
+    var body: some View {
+        Form {
+            // TODO: Set concurrency range somewhere else.
+            Stepper("Concurrency: \(params.concurrency)", value: $params.concurrency, in: 1...9)
+                .monospacedDigit()
+
+            Stepper("Before/after lines (additional context): \(params.surroundingContextLength)", value: $params.surroundingContextLength, in: 1...Int.max)
+                .monospacedDigit()
+        }
+    }
+}
+
+fileprivate struct ChunkedSettingsView: View {
+    @Binding var params: TranslateMovieChunkedParams
+
+    var body: some View {
+        Form {
+            Stepper("Chunk size: \(params.chunkSize)", value: $params.chunkSize, in: 1...100)
+                .monospacedDigit()
+
+            Stepper("Context size: \(params.contextSize)", value: $params.contextSize, in: 0...20)
+                .monospacedDigit()
+
+            Stepper("Max retries: \(params.maxRetries)", value: $params.maxRetries, in: 1...10)
+                .monospacedDigit()
         }
     }
 }

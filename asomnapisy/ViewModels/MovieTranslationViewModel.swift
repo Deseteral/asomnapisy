@@ -53,7 +53,7 @@ class MovieTranslationViewModel {
             case .lineByLine:
                 try await translateMovieLineByLine(data: data, params: translateMovieLineByLineParams)
             case .chunked:
-                SrtData(subtitles: []) // TODO: Implement.
+                try await translateMovieChunked(data: data, params: translateMovieChunkedParams)
         }
         print(output)
     }
