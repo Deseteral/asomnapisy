@@ -1,20 +1,10 @@
 import OpenAI
 
-struct TranslateMovieLineByLine {
-    let srtData: SrtData
-    let movieDetails: MovieDetails
-    let sourceLanguage: Language
-    let targetLanguage: Language
-    let concurrency: Int
-    let llmClient: OpenAI
-    let llmIdentifier: String
-}
-
-func translateMovieLineByLine(data: TranslateMovieLineByLine) async throws -> SrtData {
+func translateMovieLineByLine(data: TranslateMovieData, params: TranslateMovieLineByLineParams) async throws -> SrtData {
     var translatedSubtitles: [SrtSubtitle] = []
 
     for (idx, subtitle) in data.srtData.subtitles.enumerated() {
-        let systemPrompt = systemPrompt(data: data, currentSubtitleIdx: idx, surroundingContextLength: 5)
+        let systemPrompt = systemPrompt(data: data, params: params, currentSubtitleIdx: idx)
         let textToTranslate = subtitle.content.joined(separator: "\n")
 
         let messages: [ChatQuery.ChatCompletionMessageParam] = [
@@ -38,7 +28,7 @@ func translateMovieLineByLine(data: TranslateMovieLineByLine) async throws -> Sr
     return SrtData(subtitles: translatedSubtitles)
 }
 
-fileprivate func systemPrompt(data: TranslateMovieLineByLine, currentSubtitleIdx: Int, surroundingContextLength: Int) -> String {
+fileprivate func systemPrompt(data: TranslateMovieData, params: TranslateMovieLineByLineParams, currentSubtitleIdx: Int) -> String {
     let releaseYearText = if !data.movieDetails.releaseYear.isEmpty { " released in \(data.movieDetails.releaseYear)" } else { "" }
     let descriptionText = if !data.movieDetails.description.isEmpty {
         """
@@ -49,12 +39,12 @@ fileprivate func systemPrompt(data: TranslateMovieLineByLine, currentSubtitleIdx
         """
     } else { "" }
 
-    let (ogStart, ogEnd) = if surroundingContextLength == 0 {
+    let (ogStart, ogEnd) = if params.surroundingContextLength == 0 {
         (0, data.srtData.subtitles.count)
     } else {
         (
-            max(currentSubtitleIdx - surroundingContextLength, 0),
-            min(currentSubtitleIdx + surroundingContextLength, data.srtData.subtitles.count)
+            max(currentSubtitleIdx - params.surroundingContextLength, 0),
+            min(currentSubtitleIdx + params.surroundingContextLength, data.srtData.subtitles.count)
         )
     }
 

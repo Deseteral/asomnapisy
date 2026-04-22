@@ -6,7 +6,7 @@ struct TranslationModePickerView: View {
     var body: some View {
         Picker("Translation mode", selection: $selectedMode) {
             ForEach(TranslationMode.allCases) { mode in
-                Text(mode.displayName).tag(mode.id)
+                Text(mode.displayName).tag(mode)
             }
         }
         .pickerStyle(.menu)

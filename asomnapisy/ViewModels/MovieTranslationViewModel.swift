@@ -12,14 +12,16 @@ class MovieTranslationViewModel {
     var movieDetails = MovieDetails.empty()
 
     var llmProvider: LLMProvider = .ollama
+
     var translationMode: TranslationMode = .lineByLine
+    var translateMovieLineByLineParams: TranslateMovieLineByLineParams = .init()
+    var translateMovieChunkedParams: TranslateMovieChunkedParams = .init()
 
     // TODO: Check if source language and target lang are the same.
     // TODO: Detect source language from srt file name.
     var sourceLanguage: Language = Language.english
 
     var concurrency = 1
-    let concurrencyRange = 1...9
 
     var isFetchMovieDetailsButtonDisabled: Bool {
         get { return movieDetails.id.isEmpty }
@@ -45,8 +47,14 @@ class MovieTranslationViewModel {
         guard let client = llmProvider.getClient(sessionId: sessionId) else { return }
         let model = "llama3.1:8b"
 
-        let data = TranslateMovieLineByLine(srtData: srtData, movieDetails: movieDetails, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage, concurrency: 1, llmClient: client, llmIdentifier: model)
-        let output = try await translateMovieLineByLine(data: data)
+        let data = TranslateMovieData(srtData: srtData, movieDetails: movieDetails, sourceLanguage: sourceLanguage, targetLanguage: targetLanguage, llmClient: client, llmIdentifier: model)
+
+        let output: SrtData = switch translationMode {
+            case .lineByLine:
+                try await translateMovieLineByLine(data: data, params: translateMovieLineByLineParams)
+            case .chunked:
+                SrtData(subtitles: []) // TODO: Implement.
+        }
         print(output)
     }
 

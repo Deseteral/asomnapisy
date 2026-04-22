@@ -1,3 +1,5 @@
+import OpenAI
+
 enum TranslationMode: Identifiable, CaseIterable {
     case lineByLine
     case chunked
@@ -14,4 +16,22 @@ enum TranslationMode: Identifiable, CaseIterable {
             }
         }
     }
+}
+
+struct TranslateMovieData {
+    let srtData: SrtData
+    let movieDetails: MovieDetails
+    let sourceLanguage: Language
+    let targetLanguage: Language
+    let llmClient: OpenAI
+    let llmIdentifier: String
+}
+
+struct TranslateMovieLineByLineParams {
+    var surroundingContextLength: Int = 5
+    var concurrency: Int = 1
+}
+
+struct TranslateMovieChunkedParams {
+    let concurrency: Int = 1
 }

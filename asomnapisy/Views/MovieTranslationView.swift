@@ -64,8 +64,19 @@ struct MovieTranslationView: View {
 
             GroupBox {
                 VStack(alignment: .leading) {
-                    Stepper("Concurrency: \(vm.concurrency)", value: $vm.concurrency, in: vm.concurrencyRange)
-                        .monospacedDigit()
+                    switch vm.translationMode {
+                        case .lineByLine:
+                            Form {
+                                // TODO: Set concurrency range somewhere else.
+                                Stepper("Concurrency: \(vm.translateMovieLineByLineParams.concurrency)", value: $vm.translateMovieLineByLineParams.concurrency, in: 1...9)
+                                    .monospacedDigit()
+
+                                Stepper("Before/after lines (additional context): \(vm.translateMovieLineByLineParams.surroundingContextLength)", value: $vm.translateMovieLineByLineParams.surroundingContextLength, in: 1...Int.max)
+                                    .monospacedDigit()
+                            }
+                        case .chunked:
+                            Text("chunked")
+                    }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
