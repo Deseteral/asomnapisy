@@ -16,6 +16,7 @@
   "dependencies": {
     "@effect/cli": "0.75.1",
     "@effect/platform-bun": "0.89.0",
-    "effect": "3.21.2"
+    "effect": "3.21.2",
+    "openai": "6.34.0"
   }
 }
