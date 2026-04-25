@@ -1,0 +1,21 @@
+{
+  "name": "asomnapisy",
+  "module": "src/main.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/bun": "latest",
+    "eslint": "10.2.1",
+    "prettier": "3.8.3",
+    "typescript-eslint": "8.59.0"
+  },
+  "peerDependencies": {
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@effect/cli": "0.75.1",
+    "@effect/platform-bun": "0.89.0",
+    "effect": "3.21.2"
+  }
+}
