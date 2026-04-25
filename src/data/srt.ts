@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { FileSystem } from "@effect/platform";
+import type { PlatformError } from "@effect/platform/Error";
 
 export type SrtSubtitle = {
   order: string;
@@ -34,7 +35,7 @@ export function serializeSrt(data: SrtData): string {
     .join("");
 }
 
-export function readSrtFile(path: string) {
+export function readSrtFile(path: string): Effect.Effect<SrtData, PlatformError, FileSystem.FileSystem> {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const text = yield* fs.readFileString(path, "utf8");
