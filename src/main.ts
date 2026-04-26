@@ -27,6 +27,9 @@ const model = Options.text("model")
 const surroundingContextLength = Options.integer("surroundingContextLength")
   .pipe(Options.withDefault(5))
   .pipe(Options.withDescription("Amount of lines before and after translated ones in context."));
+const concurrency = Options.integer("concurrency")
+  .pipe(Options.withDefault(1))
+  .pipe(Options.withDescription("Number of subtitles to translate in parallel."));
 
 const chunkSize = Options.integer("chunkSize")
   .pipe(Options.withDefault(30))
@@ -64,14 +67,14 @@ function makeAppLayer(args: { llmProvider: LlmProvider; model: string }) {
 
 const translateMovieLineByLineCommand = Command.make(
   "line-by-line",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength },
+  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
   (args) =>
     Effect.gen(function* () {
       const data = yield* makeTranslateMovieData(args);
 
       const result = yield* translateMovieLineByLine(data, {
         surroundingContextLength: args.surroundingContextLength,
-        concurrency: 1,
+        concurrency: args.concurrency,
       });
 
       yield* Effect.logDebug(serializeSrt(result));
