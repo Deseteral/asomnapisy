@@ -60,6 +60,7 @@ const translateMovieLineByLineCommand = Command.make(
       Effect.provide(OpenAiLanguageModel.model(args.model)),
       Effect.provide(makeOpenAiClientLayer(args.llmProvider)),
       Effect.provide(TmdbClientLive),
+      Effect.provide(FetchHttpClient.layer),
     ),
 );
 
@@ -89,6 +90,7 @@ const translateMovieChunkedCommand = Command.make(
       Effect.provide(OpenAiLanguageModel.model(args.model)),
       Effect.provide(makeOpenAiClientLayer(args.llmProvider)),
       Effect.provide(TmdbClientLive),
+      Effect.provide(FetchHttpClient.layer),
     ),
 );
 
@@ -106,7 +108,10 @@ const cli = Command.run(command, {
   version: "v1.0.0",
 });
 
-cli(process.argv).pipe(
+// Cast needed: TypeScript's Exclude can't reduce CliApp.Environment (FileSystem | Path | Terminal)
+// against BunContext even though all members are provided.
+const program = cli(process.argv).pipe(
   Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer)),
-  BunRuntime.runMain,
 );
+
+(program as Effect.Effect<void, any>).pipe(BunRuntime.runMain);

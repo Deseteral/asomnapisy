@@ -31,22 +31,25 @@ export function resolveMovieDetails(filename: string): Effect.Effect<MovieDetail
 
   if (!filenameDetails) {
     return Effect.logWarning("Could not parse movie details from filename.").pipe(
-      Effect.map(() => baseDetails),
+      Effect.as(baseDetails),
     );
   }
 
   const tmdbId = filenameDetails.tmdbId;
   if (!tmdbId) {
     return Effect.logWarning("Could not parse TMDB ID from filename.").pipe(
-      Effect.map(() => baseDetails),
+      Effect.as(baseDetails),
     );
   }
 
-  return TmdbClient.getMovieDetails(tmdbId).pipe(
+  return Effect.gen(function* () {
+    const tmdb = yield* TmdbClient;
+    return yield* tmdb.getMovieDetails(tmdbId);
+  }).pipe(
     Effect.catchAll((error) =>
       Effect.logWarning(
         `Failed to fetch TMDB details: ${error.message}. Continuing with filename-only details.`,
-      ).pipe(Effect.map(() => baseDetails)),
+      ).pipe(Effect.as(baseDetails)),
     ),
   );
 }
