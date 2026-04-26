@@ -1,13 +1,15 @@
 import { Args, Command, Options } from "@effect/cli";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
+import { FetchHttpClient } from "@effect/platform";
+import { OpenAiLanguageModel } from "@effect/ai-openai";
 import path from "node:path";
 import { readSrtFile, serializeSrt } from "./data/srt.ts";
 import { resolveMovieDetails } from "./data/movie-details.ts";
 import type { TranslateMovieData } from "./data/translation-mode.ts";
 import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line.ts";
 import { translateMovieChunked } from "./translation-modes/translation-mode-chunked.ts";
-import { LLM_PROVIDERS, makeLlmClientLayer } from "./services/llm-client.ts";
+import { LLM_PROVIDERS, makeOpenAiClientLayer } from "./services/llm-client.ts";
 import { TmdbClientLive } from "./services/tmdb-client.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
@@ -46,7 +48,6 @@ const translateMovieLineByLineCommand = Command.make(
         movieDetails,
         sourceLanguage: args.sourceLanguage,
         targetLanguage: args.targetLanguage,
-        model: args.model,
       };
 
       const result = yield* translateMovieLineByLine(data, {
@@ -56,7 +57,8 @@ const translateMovieLineByLineCommand = Command.make(
 
       yield* Effect.logDebug(serializeSrt(result));
     }).pipe(
-      Effect.provide(makeLlmClientLayer(args.llmProvider)),
+      Effect.provide(OpenAiLanguageModel.model(args.model)),
+      Effect.provide(makeOpenAiClientLayer(args.llmProvider)),
       Effect.provide(TmdbClientLive),
     ),
 );
@@ -74,7 +76,6 @@ const translateMovieChunkedCommand = Command.make(
         movieDetails,
         sourceLanguage: args.sourceLanguage,
         targetLanguage: args.targetLanguage,
-        model: args.model,
       };
 
       const result = yield* translateMovieChunked(data, {
@@ -85,7 +86,8 @@ const translateMovieChunkedCommand = Command.make(
 
       yield* Effect.logDebug(serializeSrt(result));
     }).pipe(
-      Effect.provide(makeLlmClientLayer(args.llmProvider)),
+      Effect.provide(OpenAiLanguageModel.model(args.model)),
+      Effect.provide(makeOpenAiClientLayer(args.llmProvider)),
       Effect.provide(TmdbClientLive),
     ),
 );
@@ -104,4 +106,7 @@ const cli = Command.run(command, {
   version: "v1.0.0",
 });
 
-cli(process.argv).pipe(Effect.provide(BunContext.layer), BunRuntime.runMain);
+cli(process.argv).pipe(
+  Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer)),
+  BunRuntime.runMain,
+);
