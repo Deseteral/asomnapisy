@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { TmdbClient } from "../services/tmdb-client.ts";
+
 export type MovieDetails = {
   title: string;
   tmdbId?: string;
@@ -20,4 +23,31 @@ export function parseMovieDetailsFromFilename(filename: string): MovieDetails | 
   if (!title) return null;
 
   return { tmdbId, title, releaseYear };
+}
+
+export function resolveMovieDetails(filename: string): Effect.Effect<MovieDetails, never, TmdbClient> {
+  const filenameDetails = parseMovieDetailsFromFilename(filename);
+  const baseDetails: MovieDetails = filenameDetails ?? { title: filename };
+
+  if (!filenameDetails) {
+    return Effect.logWarning("Could not parse movie details from filename.").pipe(
+      Effect.map(() => baseDetails),
+    );
+  }
+
+  const tmdbId = filenameDetails.tmdbId;
+  if (!tmdbId) {
+    return Effect.logWarning("Could not parse TMDB ID from filename.").pipe(
+      Effect.map(() => baseDetails),
+    );
+  }
+
+  return TmdbClient.pipe(
+    Effect.flatMap((tmdb) => tmdb.getMovieDetails(tmdbId)),
+    Effect.catchAll((error) =>
+      Effect.logWarning(
+        `Failed to fetch TMDB details: ${error.message}. Continuing with filename-only details.`,
+      ).pipe(Effect.map(() => baseDetails)),
+    ),
+  );
 }

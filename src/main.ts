@@ -1,23 +1,52 @@
 import { Command, Args, Options } from "@effect/cli";
 import { Effect } from "effect";
 import { BunRuntime, BunContext } from "@effect/platform-bun";
-import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line";
+import path from "node:path";
+import { readSrtFile, serializeSrt } from "./data/srt.ts";
+import { resolveMovieDetails } from "./data/movie-details.ts";
+import type { TranslateMovieData } from "./data/translation-mode.ts";
+import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line.ts";
+import { makeLlmClientLayer, LLM_PROVIDERS } from "./services/llm-client.ts";
+import { TmdbClientLive } from "./services/tmdb-client.ts";
 
 // Common params.
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" });
 const sourceLanguage = Options.text("sourceLanguage").pipe(Options.withDefault("english"));
 const targetLanguage = Options.text("targetLanguage");
-const concurrency = Options.integer("concurrency").pipe(Options.withDefault(1));
+const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS);
+const model = Options.text("model");
 
 // line-by-line specific params.
-const lineByLineSurroundingContextLength = Options.integer("surroundingContextLength").pipe(
+const surroundingContextLength = Options.integer("surroundingContextLength").pipe(
   Options.withDefault(5),
-); // TODO: Add range.
+);
 
 const translateMovieLineByLineCommand = Command.make(
   "line-by-line",
-  { input, sourceLanguage, targetLanguage, lineByLineSurroundingContextLength, concurrency },
-  () => translateMovieLineByLine(),
+  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength },
+  (args) =>
+    Effect.gen(function* () {
+      const srtData = yield* readSrtFile(args.input);
+      const movieDetails = yield* resolveMovieDetails(path.basename(args.input));
+
+      const data: TranslateMovieData = {
+        srtData,
+        movieDetails,
+        sourceLanguage: args.sourceLanguage,
+        targetLanguage: args.targetLanguage,
+        model: args.model,
+      };
+
+      const result = yield* translateMovieLineByLine(data, {
+        surroundingContextLength: args.surroundingContextLength,
+        concurrency: 1,
+      });
+
+      yield* Effect.logDebug(serializeSrt(result));
+    }).pipe(
+      Effect.provide(makeLlmClientLayer(args.llmProvider)),
+      Effect.provide(TmdbClientLive),
+    ),
 );
 
 const command = Command.make("asomnapisy").pipe(

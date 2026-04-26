@@ -75,7 +75,8 @@ export const LlmClientOpenRouterLive = Layer.effect(
   }),
 );
 
-export type LlmProvider = "ollama" | "openrouter";
+export const LLM_PROVIDERS = ["ollama", "openrouter"] as const;
+export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
 export function makeLlmClientLayer(provider: LlmProvider): Layer.Layer<LlmClient, LlmError> {
   return Match.value(provider).pipe(
