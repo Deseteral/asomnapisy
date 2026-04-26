@@ -9,7 +9,7 @@ import { resolveMovieDetails } from "./data/movie-details.ts";
 import type { TranslateMovieData } from "./data/translation-mode.ts";
 import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line.ts";
 import { translateMovieChunked } from "./translation-modes/translation-mode-chunked.ts";
-import { LLM_PROVIDERS, makeOpenAiClientLayer } from "./services/llm-client.ts";
+import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "./services/llm-client.ts";
 import { TmdbClientLive } from "./services/tmdb-client.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
@@ -35,20 +35,39 @@ const maxRetries = Options.integer("maxRetries")
   .pipe(Options.withDefault(3))
   .pipe(Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."));
 
+function makeTranslateMovieData(args: {
+  input: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+}) {
+  return Effect.gen(function* () {
+    const srtData = yield* readSrtFile(args.input);
+    const movieDetails = yield* resolveMovieDetails(path.basename(args.input));
+
+    return {
+      srtData,
+      movieDetails,
+      sourceLanguage: args.sourceLanguage,
+      targetLanguage: args.targetLanguage,
+    } satisfies TranslateMovieData;
+  });
+}
+
+function makeAppLayer(args: { llmProvider: LlmProvider; model: string }) {
+  return Layer.mergeAll(
+    OpenAiLanguageModel.model(args.model),
+    makeOpenAiClientLayer(args.llmProvider),
+    TmdbClientLive,
+    FetchHttpClient.layer,
+  );
+}
+
 const translateMovieLineByLineCommand = Command.make(
   "line-by-line",
   { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength },
   (args) =>
     Effect.gen(function* () {
-      const srtData = yield* readSrtFile(args.input);
-      const movieDetails = yield* resolveMovieDetails(path.basename(args.input));
-
-      const data: TranslateMovieData = {
-        srtData,
-        movieDetails,
-        sourceLanguage: args.sourceLanguage,
-        targetLanguage: args.targetLanguage,
-      };
+      const data = yield* makeTranslateMovieData(args);
 
       const result = yield* translateMovieLineByLine(data, {
         surroundingContextLength: args.surroundingContextLength,
@@ -56,12 +75,7 @@ const translateMovieLineByLineCommand = Command.make(
       });
 
       yield* Effect.logDebug(serializeSrt(result));
-    }).pipe(
-      Effect.provide(OpenAiLanguageModel.model(args.model)),
-      Effect.provide(makeOpenAiClientLayer(args.llmProvider)),
-      Effect.provide(TmdbClientLive),
-      Effect.provide(FetchHttpClient.layer),
-    ),
+    }).pipe(Effect.provide(makeAppLayer(args))),
 );
 
 const translateMovieChunkedCommand = Command.make(
@@ -69,15 +83,7 @@ const translateMovieChunkedCommand = Command.make(
   { input, sourceLanguage, targetLanguage, llmProvider, model, chunkSize, surroundingContextLength, maxRetries },
   (args) =>
     Effect.gen(function* () {
-      const srtData = yield* readSrtFile(args.input);
-      const movieDetails = yield* resolveMovieDetails(path.basename(args.input));
-
-      const data: TranslateMovieData = {
-        srtData,
-        movieDetails,
-        sourceLanguage: args.sourceLanguage,
-        targetLanguage: args.targetLanguage,
-      };
+      const data = yield* makeTranslateMovieData(args);
 
       const result = yield* translateMovieChunked(data, {
         chunkSize: args.chunkSize,
@@ -86,12 +92,7 @@ const translateMovieChunkedCommand = Command.make(
       });
 
       yield* Effect.logDebug(serializeSrt(result));
-    }).pipe(
-      Effect.provide(OpenAiLanguageModel.model(args.model)),
-      Effect.provide(makeOpenAiClientLayer(args.llmProvider)),
-      Effect.provide(TmdbClientLive),
-      Effect.provide(FetchHttpClient.layer),
-    ),
+    }).pipe(Effect.provide(makeAppLayer(args))),
 );
 
 const command = Command.make("asomnapisy").pipe(
