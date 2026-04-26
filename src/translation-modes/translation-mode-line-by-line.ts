@@ -1,7 +1,7 @@
 import { AiError, LanguageModel } from "@effect/ai";
 import { Effect } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
-import type { TranslateMovieData, TranslateMovieLineByLineParams } from "../data/translation-mode.ts";
+import { languageCodeToName, type TranslateMovieData, type TranslateMovieLineByLineParams } from "../data/translation-mode.ts";
 
 export function translateMovieLineByLine(
   data: TranslateMovieData,
@@ -76,7 +76,7 @@ function buildSystemPrompt(
 You are a professional translator and the movie expert. You are going to translate movie subtitles.
 The movie we're translating is "${data.movieDetails.title}"${releaseYearText}.
 ${descriptionText}
-You will be translating from ${data.sourceLanguage} to ${data.targetLanguage}.
+You will be translating from ${languageCodeToName(data.sourceLanguage)} to ${languageCodeToName(data.targetLanguage)}.
 Preserve the meaning, tone, and natural spoken style. Return only the translated subtitles and nothing else.
 Sometimes there are new lines in the middle of sentence. They're required to correctly fit subtitles on the display. New lines don't mean anything. Treat those sentences as one sentence. Only full stop/period mean "end of sentence". Preserve new lines for presentation purposes.
 I will only give you a couple of lines at the time. Return only the translation of given lines.

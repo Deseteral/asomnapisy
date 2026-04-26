@@ -19,10 +19,10 @@ import { TmdbClient, TmdbClientLive, TmdbError } from "./services/tmdb-client.ts
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
   .pipe(Args.withDescription("The path of subtitle file to translate."));
 const sourceLanguage = Options.text("sourceLanguage")
-  .pipe(Options.withDefault("english"))
-  .pipe(Options.withDescription("Language of source subtitles."));
+  .pipe(Options.withDefault("en"))
+  .pipe(Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."));
 const targetLanguage = Options.text("targetLanguage")
-  .pipe(Options.withDescription("The language to translate the subtitles to."));
+  .pipe(Options.withDescription("Language code to translate the subtitles to (e.g. pl, es, ja)."));
 const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS)
   .pipe(Options.withDescription("LLM provider service."));
 const model = Options.text("model")

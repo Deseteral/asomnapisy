@@ -2,7 +2,7 @@ import { AiError, LanguageModel, Prompt } from "@effect/ai";
 import { Effect, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
-import type { TranslateMovieChunkedParams, TranslateMovieData } from "../data/translation-mode.ts";
+import { languageCodeToName, type TranslateMovieChunkedParams, type TranslateMovieData } from "../data/translation-mode.ts";
 import { LlmError } from "../services/llm-client.ts";
 
 type ChunkPrompt = {
@@ -125,7 +125,7 @@ function buildSystemPrompt(data: TranslateMovieData): string {
     : "";
 
   return `
-You are a professional movie translator (${data.sourceLanguage} to ${data.targetLanguage}).
+You are a professional movie translator (${languageCodeToName(data.sourceLanguage)} to ${languageCodeToName(data.targetLanguage)}).
 Movie: ${data.movieDetails.title}${yearText}
 ${descriptionText}
 
