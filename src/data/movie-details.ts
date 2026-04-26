@@ -42,8 +42,7 @@ export function resolveMovieDetails(filename: string): Effect.Effect<MovieDetail
     );
   }
 
-  return TmdbClient.pipe(
-    Effect.flatMap((tmdb) => tmdb.getMovieDetails(tmdbId)),
+  return TmdbClient.getMovieDetails(tmdbId).pipe(
     Effect.catchAll((error) =>
       Effect.logWarning(
         `Failed to fetch TMDB details: ${error.message}. Continuing with filename-only details.`,
