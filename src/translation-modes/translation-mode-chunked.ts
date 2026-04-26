@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
-import type { TranslateMovieData, TranslateMovieChunkedParams } from "../data/translation-mode.ts";
-import { LlmClient, type ChatMessage, type LlmError } from "../services/llm-client.ts";
+import type { TranslateMovieChunkedParams, TranslateMovieData } from "../data/translation-mode.ts";
+import { type ChatMessage, LlmClient, type LlmError } from "../services/llm-client.ts";
 
 type ChunkPrompt = {
   context_before: string;

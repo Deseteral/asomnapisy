@@ -4,14 +4,16 @@ import type { MovieDetails } from "../data/movie-details.ts";
 export class TmdbError extends Data.TaggedError("TmdbError")<{
   message: string;
   cause?: unknown;
-}> {}
+}> {
+}
 
 export class TmdbClient extends Context.Tag("TmdbClient")<
   TmdbClient,
   {
     getMovieDetails(tmdbId: string): Effect.Effect<MovieDetails, TmdbError>;
   }
->() {}
+>() {
+}
 
 type TmdbMovieResponse = {
   original_title: string;
@@ -33,7 +35,7 @@ function getMovieDetails(token: string, tmdbId: string): Effect.Effect<MovieDeta
       }
 
       const data = (await response.json()) as Record<string, unknown>;
-      if (!data['original_title']) {
+      if (!data["original_title"]) {
         throw new Error(`Bad response from TMDB.`);
       }
 

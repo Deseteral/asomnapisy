@@ -1,9 +1,6 @@
 import { Effect } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
-import type {
-  TranslateMovieData,
-  TranslateMovieLineByLineParams,
-} from "../data/translation-mode.ts";
+import type { TranslateMovieData, TranslateMovieLineByLineParams } from "../data/translation-mode.ts";
 import { LlmClient, type LlmError } from "../services/llm-client.ts";
 
 export function translateMovieLineByLine(
@@ -68,12 +65,9 @@ function buildSystemPrompt(
     params.surroundingContextLength === 0
       ? [0, data.srtData.subtitles.length]
       : [
-          Math.max(currentSubtitleIdx - params.surroundingContextLength, 0),
-          Math.min(
-            currentSubtitleIdx + params.surroundingContextLength,
-            data.srtData.subtitles.length,
-          ),
-        ];
+        Math.max(currentSubtitleIdx - params.surroundingContextLength, 0),
+        Math.min(currentSubtitleIdx + params.surroundingContextLength, data.srtData.subtitles.length),
+      ];
 
   const originalLines = data.srtData.subtitles
     .slice(ogStart, ogEnd)

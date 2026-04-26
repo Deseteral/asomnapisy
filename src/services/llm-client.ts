@@ -4,7 +4,8 @@ import OpenAI from "openai";
 export class LlmError extends Data.TaggedError("LlmError")<{
   message: string;
   cause?: unknown;
-}> {}
+}> {
+}
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -22,7 +23,8 @@ export class LlmClient extends Context.Tag("LlmClient")<
   {
     chatCompletion(params: ChatCompletionParams): Effect.Effect<string, LlmError>;
   }
->() {}
+>() {
+}
 
 function chatCompletion(client: OpenAI, params: ChatCompletionParams): Effect.Effect<string, LlmError> {
   return Effect.tryPromise({
