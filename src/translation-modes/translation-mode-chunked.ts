@@ -51,7 +51,7 @@ export function translateMovieChunked(
       translateChunk(systemPrompt, chunkDescriptor, params.maxRetries).pipe(
         Effect.tap(() => Effect.logInfo(`Translated chunk ${chunkDescriptor.chunkIndex + 1}/${chunkDescriptor.totalChunks}`)),
       ),
-    { concurrency: 1 }, // TODO: Add support for concurrency.
+    { concurrency: params.concurrency },
   ).pipe(Effect.map((chunks) => ({ subtitles: chunks.flat() })));
 }
 

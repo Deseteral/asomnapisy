@@ -91,7 +91,7 @@ const translateMovieLineByLineCommand = Command.make(
 
 const translateMovieChunkedCommand = Command.make(
   "chunked",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, chunkSize, surroundingContextLength, maxRetries },
+  { input, sourceLanguage, targetLanguage, llmProvider, model, chunkSize, surroundingContextLength, maxRetries, concurrency },
   (args) =>
     Effect.gen(function* () {
       const data = yield* makeTranslateMovieData(args);
@@ -100,6 +100,7 @@ const translateMovieChunkedCommand = Command.make(
         chunkSize: args.chunkSize,
         surroundingContextLength: args.surroundingContextLength,
         maxRetries: args.maxRetries,
+        concurrency: args.concurrency,
       });
 
       yield* Effect.logDebug(serializeSrt(result));

@@ -19,4 +19,5 @@ export type TranslateMovieChunkedParams = {
   chunkSize: number;
   surroundingContextLength: number;
   maxRetries: number;
+  concurrency: number;
 };
