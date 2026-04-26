@@ -27,14 +27,8 @@ export function translateMovieChunked(
       const chunkEnd = Math.min(chunkStart + params.chunkSize, subtitles.length);
 
       const currentChunk = subtitles.slice(chunkStart, chunkEnd);
-      const contextBefore = subtitles.slice(
-        Math.max(chunkStart - params.contextSize, 0),
-        chunkStart,
-      );
-      const contextAfter = subtitles.slice(
-        chunkEnd,
-        Math.min(chunkEnd + params.contextSize, subtitles.length),
-      );
+      const contextBefore = subtitles.slice(Math.max(chunkStart - params.surroundingContextLength, 0), chunkStart);
+      const contextAfter = subtitles.slice(chunkEnd, Math.min(chunkEnd + params.surroundingContextLength, subtitles.length));
 
       const chunkResult = yield* translateChunk(
         data,

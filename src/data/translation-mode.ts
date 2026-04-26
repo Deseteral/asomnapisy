@@ -18,6 +18,6 @@ export type TranslateMovieLineByLineParams = {
 
 export type TranslateMovieChunkedParams = {
   chunkSize: number;
-  contextSize: number;
+  surroundingContextLength: number;
   maxRetries: number;
 };

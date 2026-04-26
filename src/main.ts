@@ -10,22 +10,28 @@ import { translateMovieChunked } from "./translation-modes/translation-mode-chun
 import { makeLlmClientLayer, LLM_PROVIDERS } from "./services/llm-client.ts";
 import { TmdbClientLive } from "./services/tmdb-client.ts";
 
-// Common params.
-const input = Args.file({ name: "sourceSubtitles", exists: "yes" });
-const sourceLanguage = Options.text("sourceLanguage").pipe(Options.withDefault("english"));
-const targetLanguage = Options.text("targetLanguage");
-const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS);
-const model = Options.text("model");
+const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
+  .pipe(Args.withDescription("The path of subtitle file to translate."));
+const sourceLanguage = Options.text("sourceLanguage")
+  .pipe(Options.withDefault("english"))
+  .pipe(Options.withDescription("Language of source subtitles."));
+const targetLanguage = Options.text("targetLanguage")
+  .pipe(Options.withDescription("The language to translate the subtitles to."));
+const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS)
+  .pipe(Options.withDescription("LLM provider service."));
+const model = Options.text("model")
+  .pipe(Options.withDescription("LLM model identifier."));
 
-// Line-by-line specific params.
-const surroundingContextLength = Options.integer("surroundingContextLength").pipe(
-  Options.withDefault(5),
-);
+const surroundingContextLength = Options.integer("surroundingContextLength")
+  .pipe(Options.withDefault(5))
+  .pipe(Options.withDescription("Amount of lines before and after translated ones in context."));
 
-// Chunked specific params.
-const chunkSize = Options.integer("chunkSize").pipe(Options.withDefault(30));
-const contextSize = Options.integer("contextSize").pipe(Options.withDefault(4));
-const maxRetries = Options.integer("maxRetries").pipe(Options.withDefault(3));
+const chunkSize = Options.integer("chunkSize")
+  .pipe(Options.withDefault(30))
+  .pipe(Options.withDescription("The amount of lines in a single translation chunk."));
+const maxRetries = Options.integer("maxRetries")
+  .pipe(Options.withDefault(3))
+  .pipe(Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."));
 
 const translateMovieLineByLineCommand = Command.make(
   "line-by-line",
@@ -57,7 +63,7 @@ const translateMovieLineByLineCommand = Command.make(
 
 const translateMovieChunkedCommand = Command.make(
   "chunked",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, chunkSize, contextSize, maxRetries },
+  { input, sourceLanguage, targetLanguage, llmProvider, model, chunkSize, surroundingContextLength, maxRetries },
   (args) =>
     Effect.gen(function* () {
       const srtData = yield* readSrtFile(args.input);
@@ -73,7 +79,7 @@ const translateMovieChunkedCommand = Command.make(
 
       const result = yield* translateMovieChunked(data, {
         chunkSize: args.chunkSize,
-        contextSize: args.contextSize,
+        surroundingContextLength: args.surroundingContextLength,
         maxRetries: args.maxRetries,
       });
 
