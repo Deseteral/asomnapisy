@@ -1,8 +1,9 @@
-import { Effect } from "effect";
+import { AiError, LanguageModel, Prompt } from "@effect/ai";
+import { Effect, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
 import type { TranslateMovieChunkedParams, TranslateMovieData } from "../data/translation-mode.ts";
-import { type ChatMessage, LlmClient, LlmError } from "../services/llm-client.ts";
+import { LlmError } from "../services/llm-client.ts";
 
 type ChunkPrompt = {
   context_before: string;
@@ -10,133 +11,111 @@ type ChunkPrompt = {
   context_after: string;
 };
 
-type ChunkResponse = {
-  translations: string[];
+const ChunkResponseSchema = Schema.Struct({
+  translations: Schema.Array(Schema.String),
+});
+
+type ChunkDescriptor = {
+  currentChunk: SrtSubtitle[];
+  chunkStart: number;
+  contextBefore: SrtSubtitle[];
+  contextAfter: SrtSubtitle[];
+  chunkIndex: number;
+  totalChunks: number;
 };
 
 export function translateMovieChunked(
   data: TranslateMovieData,
   params: TranslateMovieChunkedParams,
-): Effect.Effect<SrtData, LlmError, LlmClient> {
-  return Effect.gen(function* () {
-    const systemPrompt = buildSystemPrompt(data);
-    const subtitles = data.srtData.subtitles;
-    const translatedSubtitles: SrtSubtitle[] = [];
+): Effect.Effect<SrtData, AiError.AiError | LlmError, LanguageModel.LanguageModel> {
+  const systemPrompt = buildSystemPrompt(data);
+  const subtitles = data.srtData.subtitles;
+  const totalChunks = Math.ceil(subtitles.length / params.chunkSize);
 
-    for (let chunkStart = 0; chunkStart < subtitles.length; chunkStart += params.chunkSize) {
-      const chunkEnd = Math.min(chunkStart + params.chunkSize, subtitles.length);
+  const chunkDescriptors: ChunkDescriptor[] = [];
+  for (let chunkStart = 0; chunkStart < subtitles.length; chunkStart += params.chunkSize) {
+    const chunkEnd = Math.min(chunkStart + params.chunkSize, subtitles.length);
+    chunkDescriptors.push({
+      currentChunk: subtitles.slice(chunkStart, chunkEnd),
+      chunkStart,
+      contextBefore: subtitles.slice(Math.max(chunkStart - params.surroundingContextLength, 0), chunkStart),
+      contextAfter: subtitles.slice(chunkEnd, Math.min(chunkEnd + params.surroundingContextLength, subtitles.length)),
+      chunkIndex: chunkDescriptors.length,
+      totalChunks,
+    });
+  }
 
-      const currentChunk = subtitles.slice(chunkStart, chunkEnd);
-      const contextBefore = subtitles.slice(Math.max(chunkStart - params.surroundingContextLength, 0), chunkStart);
-      const contextAfter = subtitles.slice(chunkEnd, Math.min(chunkEnd + params.surroundingContextLength, subtitles.length));
-
-      const chunkResult = yield* translateChunk(
-        data,
-        params,
-        systemPrompt,
-        currentChunk,
-        chunkStart,
-        contextBefore,
-        contextAfter,
-      );
-
-      translatedSubtitles.push(...chunkResult);
-
-      yield* Effect.logInfo(
-        `Translated chunk ${Math.floor(chunkStart / params.chunkSize) + 1}/${Math.ceil(subtitles.length / params.chunkSize)}`,
-      );
-    }
-
-    return { subtitles: translatedSubtitles };
-  });
+  return Effect.forEach(
+    chunkDescriptors,
+    (chunkDescriptor) =>
+      translateChunk(systemPrompt, chunkDescriptor, params.maxRetries).pipe(
+        Effect.tap(() => Effect.logInfo(`Translated chunk ${chunkDescriptor.chunkIndex + 1}/${chunkDescriptor.totalChunks}`)),
+      ),
+    { concurrency: 1 }, // TODO: Add support for concurrency.
+  ).pipe(Effect.map((chunks) => ({ subtitles: chunks.flat() })));
 }
 
 function translateChunk(
-  data: TranslateMovieData,
-  params: TranslateMovieChunkedParams,
   systemPrompt: string,
-  currentChunk: SrtSubtitle[],
-  chunkStart: number,
-  contextBefore: SrtSubtitle[],
-  contextAfter: SrtSubtitle[],
-): Effect.Effect<SrtSubtitle[], LlmError, LlmClient> {
+  chunkDescriptor: ChunkDescriptor,
+  maxRetries: number,
+): Effect.Effect<SrtSubtitle[], AiError.AiError | LlmError, LanguageModel.LanguageModel> {
   return Effect.gen(function* () {
-    const llm = yield* LlmClient;
-
     const payload: ChunkPrompt = {
-      context_before: contextBefore.map((s) => getFullText(s)).join("\n"),
-      translate_this: currentChunk.map((s) => getFullText(s)),
-      context_after: contextAfter.map((s) => getFullText(s)).join("\n"),
+      context_before: chunkDescriptor.contextBefore.map((s) => getFullText(s)).join("\n"),
+      translate_this: chunkDescriptor.currentChunk.map((s) => getFullText(s)),
+      context_after: chunkDescriptor.contextAfter.map((s) => getFullText(s)).join("\n"),
     };
 
-    const messages: ChatMessage[] = [
+    const messagesRef = yield* Ref.make<Array<Prompt.MessageEncoded>>([
       { role: "system", content: systemPrompt },
       { role: "user", content: JSON.stringify(payload) },
-    ];
+    ]);
 
-    for (let attempt = 0; attempt <= params.maxRetries; attempt += 1) {
-      const output = yield* llm.chatCompletion({
-        messages,
-        model: data.model,
-        responseFormat: "json_object",
-      });
+    const singleAttempt = Effect.gen(function* () {
+      const messages = yield* Ref.get(messagesRef);
 
-      try {
-        const { translations } = decodeChunkResponse(output, currentChunk.length);
+      const response = yield* LanguageModel.generateText({ prompt: messages });
+      const rawText = response.text;
 
-        return translations.map((text, i) => {
-          const original = currentChunk[i];
-          if (!original) throw new Error(`Missing subtitle at index ${i} in chunk`);
-          return {
-            order: original.order,
-            timestamp: original.timestamp,
-            content: text.split("\n"),
-          };
+      const parsed = yield* Schema.decodeUnknown(Schema.parseJson(ChunkResponseSchema))(rawText).pipe(
+        Effect.mapError((parseError) => new LlmError({ message: `Failed to decode response: ${parseError.message}` })),
+      );
+
+      if (parsed.translations.length !== chunkDescriptor.currentChunk.length) {
+        return yield* new LlmError({
+          message: `Expected ${chunkDescriptor.currentChunk.length} translations but got ${parsed.translations.length}.`,
         });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-
-        if (attempt < params.maxRetries) {
-          yield* Effect.logWarning(
-            `Chunk at index ${chunkStart} failed (attempt ${attempt + 1}/${params.maxRetries + 1}): ${errorMessage} Retrying...`,
-          );
-          messages.push({ role: "assistant", content: output });
-          messages.push({
-            role: "user",
-            content: `${errorMessage} Please fix your response.`,
-          });
-        }
       }
-    }
 
-    yield* Effect.logWarning(
-      `Failed to translate chunk at index ${chunkStart} after ${params.maxRetries + 1} attempts. Keeping original subtitles.`,
+      return parsed.translations.map((text, idx) => {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const original = chunkDescriptor.currentChunk[idx]!;
+        return {
+          order: original.order,
+          timestamp: original.timestamp,
+          content: text.split("\n"),
+        };
+      }) satisfies SrtSubtitle[];
+    }).pipe(
+      Effect.tapError((error) => Ref.update(messagesRef, (messages) =>
+        [
+          ...messages,
+          { role: "user" as const, content: `Fix your response: ${error.message}` },
+        ],
+      )),
     );
-    return [...currentChunk];
+
+    return yield* singleAttempt.pipe(
+      Effect.retry({ times: maxRetries }),
+      Effect.catchAll(() =>
+        Effect.gen(function* () {
+          yield* Effect.logWarning(`Failed to translate chunk at index ${chunkDescriptor.chunkStart} after ${maxRetries + 1} attempts. Keeping original subtitles.`);
+          return [...chunkDescriptor.currentChunk];
+        }),
+      ),
+    );
   });
-}
-
-
-function decodeChunkResponse(output: string, expectedCount: number): ChunkResponse {
-  let response: ChunkResponse;
-  try {
-    response = JSON.parse(output) as ChunkResponse;
-  } catch (e) {
-    const reason = e instanceof Error ? e.message : String(e);
-    throw new Error(`Failed to decode response as JSON: ${reason}`, { cause: e });
-  }
-
-  if (!Array.isArray(response.translations)) {
-    throw new Error("Response is missing 'translations' array.");
-  }
-
-  if (response.translations.length !== expectedCount) {
-    throw new Error(
-      `Expected ${expectedCount} translations but got ${response.translations.length}.`,
-    );
-  }
-
-  return response;
 }
 
 function buildSystemPrompt(data: TranslateMovieData): string {
