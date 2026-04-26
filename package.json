@@ -13,9 +13,10 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
+    "@effect/ai": "0.35.0",
+    "@effect/ai-openai": "0.39.2",
     "@effect/cli": "0.75.1",
     "@effect/platform-bun": "0.89.0",
-    "effect": "3.21.2",
-    "openai": "6.34.0"
+    "effect": "3.21.2"
   }
 }

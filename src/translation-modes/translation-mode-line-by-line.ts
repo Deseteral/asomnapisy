@@ -1,17 +1,17 @@
+import { AiError, LanguageModel } from "@effect/ai";
 import { Effect } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import type { TranslateMovieData, TranslateMovieLineByLineParams } from "../data/translation-mode.ts";
-import { LlmClient, type LlmError } from "../services/llm-client.ts";
 
 export function translateMovieLineByLine(
   data: TranslateMovieData,
   params: TranslateMovieLineByLineParams,
-): Effect.Effect<SrtData, LlmError, LlmClient> {
+): Effect.Effect<SrtData, AiError.AiError, LanguageModel.LanguageModel> {
   return Effect.gen(function* () {
     const translatedSubtitles = yield* Effect.forEach(
       data.srtData.subtitles,
       (subtitle, idx) => translateSingleSubtitle(data, params, subtitle, idx),
-      { concurrency: 1 },
+      { concurrency: params.concurrency },
     );
 
     return { subtitles: translatedSubtitles };
@@ -23,27 +23,25 @@ function translateSingleSubtitle(
   params: TranslateMovieLineByLineParams,
   subtitle: SrtSubtitle,
   idx: number,
-): Effect.Effect<SrtSubtitle, LlmError, LlmClient> {
+): Effect.Effect<SrtSubtitle, AiError.AiError, LanguageModel.LanguageModel> {
   return Effect.gen(function* () {
-    const llm = yield* LlmClient;
     const systemPrompt = buildSystemPrompt(data, params, idx);
     const textToTranslate = subtitle.content.join("\n");
 
-    const output = yield* llm.chatCompletion({
-      messages: [
+    const response = yield* LanguageModel.generateText({
+      prompt: [
         { role: "system", content: systemPrompt },
         { role: "user", content: textToTranslate },
       ],
-      model: data.model,
     });
 
     yield* Effect.logInfo(`Translated subtitle ${idx + 1}/${data.srtData.subtitles.length}`);
-    yield* Effect.logDebug(output);
+    yield* Effect.logDebug(response.text);
 
     return {
       order: subtitle.order,
       timestamp: subtitle.timestamp,
-      content: output.split("\n"),
+      content: response.text.split("\n"),
     } satisfies SrtSubtitle;
   });
 }

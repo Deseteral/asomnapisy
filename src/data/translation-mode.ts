@@ -8,7 +8,6 @@ export type TranslateMovieData = {
   movieDetails: MovieDetails;
   sourceLanguage: string;
   targetLanguage: string;
-  model: string;
 };
 
 export type TranslateMovieLineByLineParams = {
