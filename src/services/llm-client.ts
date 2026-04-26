@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Layer, Match } from "effect";
+import { Config, Context, Data, Effect, Layer, Match, Redacted } from "effect";
 import OpenAI from "openai";
 
 export class LlmError extends Data.TaggedError("LlmError")<{
@@ -52,25 +52,27 @@ function makeLlmClientFromOpenAI(client: OpenAI): Context.Tag.Service<typeof Llm
   });
 }
 
-export const LlmClientOllamaLive = Layer.sync(LlmClient, () => {
-  const url = process.env["OLLAMA_URL"] ?? "http://localhost:11434";
-  const client = new OpenAI({ baseURL: `${url}/v1`, apiKey: "ollama" });
-  return makeLlmClientFromOpenAI(client);
-});
+export const LlmClientOllamaLive = Layer.effect(
+  LlmClient,
+  Effect.gen(function* () {
+    const url = yield* Config.string("OLLAMA_URL").pipe(Config.withDefault("http://localhost:11434"));
+    const client = new OpenAI({ baseURL: `${url}/v1`, apiKey: "ollama" });
+    return makeLlmClientFromOpenAI(client);
+  }).pipe(
+    Effect.mapError((cause) => new LlmError({ message: "Failed to read OLLAMA_URL configuration.", cause })),
+  ),
+);
 
 export const LlmClientOpenRouterLive = Layer.effect(
   LlmClient,
   Effect.gen(function* () {
-    const key = process.env["OPENROUTER_API_KEY"];
-    if (!key) {
-      return yield* Effect.fail(
-        new LlmError({ message: "OPENROUTER_API_KEY environment variable is not set." }),
-      );
-    }
+    const key = yield* Config.redacted("OPENROUTER_API_KEY").pipe(
+      Effect.mapError(() => new LlmError({ message: "OPENROUTER_API_KEY environment variable is not set." })),
+    );
 
     const client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
-      apiKey: key,
+      apiKey: Redacted.value(key),
       defaultHeaders: { "X-OpenRouter-Title": "asomnapisy" },
     });
     return makeLlmClientFromOpenAI(client);

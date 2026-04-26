@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Layer } from "effect";
+import { Config, Context, Data, Effect, Layer, Redacted } from "effect";
 import type { MovieDetails } from "../data/movie-details.ts";
 
 export class TmdbError extends Data.TaggedError("TmdbError")<{
@@ -56,15 +56,12 @@ function getMovieDetails(token: string, tmdbId: string): Effect.Effect<MovieDeta
 export const TmdbClientLive: Layer.Layer<TmdbClient, TmdbError> = Layer.effect(
   TmdbClient,
   Effect.gen(function* () {
-    const token = process.env["TMDB_ACCESS_TOKEN"];
-    if (!token) {
-      return yield* Effect.fail(
-        new TmdbError({ message: "TMDB_ACCESS_TOKEN environment variable is not set." }),
-      );
-    }
+    const token = yield* Config.redacted("TMDB_ACCESS_TOKEN").pipe(
+      Effect.mapError(() => new TmdbError({ message: "TMDB_ACCESS_TOKEN environment variable is not set." })),
+    );
 
     return TmdbClient.of({
-      getMovieDetails: (tmdbId) => getMovieDetails(token, tmdbId),
+      getMovieDetails: (tmdbId) => getMovieDetails(Redacted.value(token), tmdbId),
     });
   }),
 );
