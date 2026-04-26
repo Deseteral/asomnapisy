@@ -1,4 +1,4 @@
-import { Config, Context, Data, Effect, Layer, Redacted } from "effect";
+import { Config, Context, Data, Effect, Layer, Redacted, Schema } from "effect";
 import type { MovieDetails } from "../data/movie-details.ts";
 
 export class TmdbError extends Data.TaggedError("TmdbError")<{
@@ -15,11 +15,11 @@ export class TmdbClient extends Context.Tag("TmdbClient")<
 >() {
 }
 
-type TmdbMovieResponse = {
-  original_title: string;
-  release_date?: string;
-  overview?: string;
-};
+const TmdbMovieResponse = Schema.Struct({
+  original_title: Schema.String,
+  release_date: Schema.optional(Schema.String),
+  overview: Schema.optional(Schema.String),
+});
 
 function getMovieDetails(token: string, tmdbId: string): Effect.Effect<MovieDetails, TmdbError> {
   return Effect.tryPromise({
@@ -34,15 +34,15 @@ function getMovieDetails(token: string, tmdbId: string): Effect.Effect<MovieDeta
         throw new Error(`TMDB responded with status ${response.status}.`);
       }
 
-      const data = (await response.json()) as Record<string, unknown>;
-      if (!data["original_title"]) {
-        throw new Error(`Bad response from TMDB.`);
-      }
-
-      return data as TmdbMovieResponse;
+      return response.json();
     },
     catch: (error) => new TmdbError({ message: "Failed to fetch movie details from TMDB.", cause: error }),
   }).pipe(
+    Effect.flatMap((data) =>
+      Schema.decodeUnknown(TmdbMovieResponse)(data).pipe(
+        Effect.mapError((cause) => new TmdbError({ message: "Bad response from TMDB.", cause })),
+      ),
+    ),
     Effect.map((json) => {
       const title = json.original_title;
       const releaseYear = json.release_date?.split("-")[0];
