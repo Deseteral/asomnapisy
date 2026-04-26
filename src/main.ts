@@ -1,8 +1,12 @@
 import { Args, Command, Options } from "@effect/cli";
 import { Effect, Layer } from "effect";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { FetchHttpClient } from "@effect/platform";
-import { OpenAiLanguageModel } from "@effect/ai-openai";
+import { FetchHttpClient, HttpClient } from "@effect/platform";
+import type { PlatformError } from "@effect/platform/Error";
+import type { FileSystem } from "@effect/platform/FileSystem";
+import { LanguageModel, Model } from "@effect/ai";
+import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
+import type { ConfigError } from "effect/ConfigError";
 import path from "node:path";
 import { readSrtFile, serializeSrt } from "./data/srt.ts";
 import { resolveMovieDetails } from "./data/movie-details.ts";
@@ -10,7 +14,7 @@ import type { TranslateMovieData } from "./data/translation-mode.ts";
 import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line.ts";
 import { translateMovieChunked } from "./translation-modes/translation-mode-chunked.ts";
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "./services/llm-client.ts";
-import { TmdbClientLive } from "./services/tmdb-client.ts";
+import { TmdbClient, TmdbClientLive, TmdbError } from "./services/tmdb-client.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
   .pipe(Args.withDescription("The path of subtitle file to translate."));
@@ -42,7 +46,7 @@ function makeTranslateMovieData(args: {
   input: string;
   sourceLanguage: string;
   targetLanguage: string;
-}) {
+}): Effect.Effect<TranslateMovieData, PlatformError, FileSystem | TmdbClient> {
   return Effect.gen(function* () {
     const srtData = yield* readSrtFile(args.input);
     const movieDetails = yield* resolveMovieDetails(path.basename(args.input));
@@ -56,7 +60,11 @@ function makeTranslateMovieData(args: {
   });
 }
 
-function makeAppLayer(args: { llmProvider: LlmProvider; model: string }) {
+function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
+  LanguageModel.LanguageModel | Model.ProviderName | OpenAiClient.OpenAiClient | TmdbClient | HttpClient.HttpClient,
+  ConfigError | TmdbError,
+  OpenAiClient.OpenAiClient | HttpClient.HttpClient
+> {
   return Layer.mergeAll(
     OpenAiLanguageModel.model(args.model),
     makeOpenAiClientLayer(args.llmProvider),
@@ -118,4 +126,5 @@ const program = cli(process.argv).pipe(
   Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer)),
 );
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (program as Effect.Effect<void, any>).pipe(BunRuntime.runMain);

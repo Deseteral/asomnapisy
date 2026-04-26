@@ -1,6 +1,8 @@
-import { Config, Data, Layer, Match, Redacted } from "effect";
+import { Config, Data, Match, Redacted } from "effect";
 import { HttpClient, HttpClientRequest } from "@effect/platform";
 import { OpenAiClient } from "@effect/ai-openai";
+import type { ConfigError } from "effect/ConfigError";
+import type { Layer } from "effect/Layer";
 
 export class LlmError extends Data.TaggedError("LlmError")<{
   message: string;
@@ -26,7 +28,7 @@ const OpenRouterOpenAiClient = OpenAiClient.layerConfig({
 export const LLM_PROVIDERS = ["ollama", "openrouter"] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
-export function makeOpenAiClientLayer(provider: LlmProvider) {
+export function makeOpenAiClientLayer(provider: LlmProvider): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
   return Match.value(provider).pipe(
     Match.when("ollama", () => OllamaOpenAiClient),
     Match.when("openrouter", () => OpenRouterOpenAiClient),
