@@ -14,7 +14,7 @@ import type { TranslateMovieData } from "./data/translation-mode.ts";
 import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line.ts";
 import { translateMovieChunked } from "./translation-modes/translation-mode-chunked.ts";
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "./services/llm-client.ts";
-import { TmdbClient, TmdbClientLive, TmdbError } from "./services/tmdb-client.ts";
+import { TmdbClient, TmdbError } from "./services/tmdb-client.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
   .pipe(Args.withDescription("The path of subtitle file to translate."));
@@ -68,7 +68,7 @@ function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.
   return Layer.mergeAll(
     OpenAiLanguageModel.model(args.model),
     makeOpenAiClientLayer(args.llmProvider),
-    TmdbClientLive,
+    TmdbClient.Default,
     FetchHttpClient.layer,
   );
 }
