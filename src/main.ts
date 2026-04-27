@@ -85,11 +85,21 @@ const translateMovieLineByLineCommand = Command.make(
 
       yield* Effect.logDebug(serializeSrt(result));
     }).pipe(Effect.provide(makeAppLayer(args))),
-);
+).pipe(Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."));
 
 const translateMovieChunkedCommand = Command.make(
   "chunked",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, chunkSize, surroundingContextLength, maxRetries, concurrency },
+  {
+    input,
+    sourceLanguage,
+    targetLanguage,
+    llmProvider,
+    model,
+    chunkSize,
+    surroundingContextLength,
+    maxRetries,
+    concurrency,
+  },
   (args) =>
     Effect.gen(function* () {
       const data = yield* makeTranslateMovieData(args);
@@ -103,7 +113,7 @@ const translateMovieChunkedCommand = Command.make(
 
       yield* Effect.logDebug(serializeSrt(result));
     }).pipe(Effect.provide(makeAppLayer(args))),
-);
+).pipe(Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request cound and is more suitable for cloud models."));
 
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([
