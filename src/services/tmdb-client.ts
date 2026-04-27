@@ -1,11 +1,11 @@
-import { Config, Context, Data, Effect, Layer, Redacted, Schema } from "effect";
+import { Config, Context, Effect, Layer, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "@effect/platform";
 import type { MovieDetails } from "../data/movie-details.ts";
 
-export class TmdbError extends Data.TaggedError("TmdbError")<{
-  message: string;
-  cause?: unknown;
-}> {
+export class TmdbError extends Schema.TaggedError<TmdbError>()("TmdbError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Unknown),
+}) {
 }
 
 export class TmdbClient extends Context.Tag("TmdbClient")<

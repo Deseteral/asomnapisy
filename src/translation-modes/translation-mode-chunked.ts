@@ -1,13 +1,13 @@
 import { AiError, LanguageModel, Prompt } from "@effect/ai";
-import { Data, Effect, Ref, Schema } from "effect";
+import { Effect, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
 import { languageCodeToName, type TranslateMovieChunkedParams, type TranslateMovieData } from "../data/translation-mode.ts";
 
-class ChunkTranslationError extends Data.TaggedError("ChunkTranslationError")<{
-  message: string;
-  cause?: unknown;
-}> {
+class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()("ChunkTranslationError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Unknown),
+}) {
 }
 
 type ChunkPrompt = {
