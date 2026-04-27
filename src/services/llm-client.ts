@@ -1,14 +1,8 @@
-import { Config, Data, Match, Redacted } from "effect";
+import { Config, Match, Redacted } from "effect";
 import { HttpClient, HttpClientRequest } from "@effect/platform";
 import { OpenAiClient } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
 import type { Layer } from "effect/Layer";
-
-export class LlmError extends Data.TaggedError("LlmError")<{
-  message: string;
-  cause?: unknown;
-}> {
-}
 
 const OllamaOpenAiClient = OpenAiClient.layerConfig({
   apiUrl: Config.string("OLLAMA_URL").pipe(

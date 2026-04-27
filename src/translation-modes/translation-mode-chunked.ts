@@ -1,9 +1,14 @@
 import { AiError, LanguageModel, Prompt } from "@effect/ai";
-import { Effect, Ref, Schema } from "effect";
+import { Data, Effect, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
 import { languageCodeToName, type TranslateMovieChunkedParams, type TranslateMovieData } from "../data/translation-mode.ts";
-import { LlmError } from "../services/llm-client.ts";
+
+class ChunkTranslationError extends Data.TaggedError("ChunkTranslationError")<{
+  message: string;
+  cause?: unknown;
+}> {
+}
 
 type ChunkPrompt = {
   context_before: string;
@@ -27,7 +32,7 @@ type ChunkDescriptor = {
 export function translateMovieChunked(
   data: TranslateMovieData,
   params: TranslateMovieChunkedParams,
-): Effect.Effect<SrtData, AiError.AiError | LlmError, LanguageModel.LanguageModel> {
+): Effect.Effect<SrtData, AiError.AiError | ChunkTranslationError, LanguageModel.LanguageModel> {
   const systemPrompt = buildSystemPrompt(data);
   const subtitles = data.srtData.subtitles;
   const totalChunks = Math.ceil(subtitles.length / params.chunkSize);
@@ -59,7 +64,7 @@ function translateChunk(
   systemPrompt: string,
   chunkDescriptor: ChunkDescriptor,
   maxRetries: number,
-): Effect.Effect<SrtSubtitle[], AiError.AiError | LlmError, LanguageModel.LanguageModel> {
+): Effect.Effect<SrtSubtitle[], AiError.AiError | ChunkTranslationError, LanguageModel.LanguageModel> {
   return Effect.gen(function* () {
     const payload: ChunkPrompt = {
       context_before: chunkDescriptor.contextBefore.map((s) => getFullText(s)).join("\n"),
@@ -79,11 +84,11 @@ function translateChunk(
       const rawText = response.text;
 
       const parsed = yield* Schema.decodeUnknown(Schema.parseJson(ChunkResponseSchema))(rawText).pipe(
-        Effect.mapError((parseError) => new LlmError({ message: `Failed to decode response: ${parseError.message}` })),
+        Effect.mapError((parseError) => new ChunkTranslationError({ message: `Failed to decode response: ${parseError.message}` })),
       );
 
       if (parsed.translations.length !== chunkDescriptor.currentChunk.length) {
-        return yield* new LlmError({
+        return yield* new ChunkTranslationError({
           message: `Expected ${chunkDescriptor.currentChunk.length} translations but got ${parsed.translations.length}.`,
         });
       }
