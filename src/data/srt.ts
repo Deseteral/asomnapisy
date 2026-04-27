@@ -47,6 +47,3 @@ export function getFullText(subtitle: SrtSubtitle): string {
   return subtitle.content.join("\n");
 }
 
-export function getSrtFullText(data: SrtData): string {
-  return data.subtitles.map((s) => getFullText(s)).join("\n");
-}

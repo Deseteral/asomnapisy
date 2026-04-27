@@ -1,8 +1,6 @@
 import type { SrtData } from "./srt.ts";
 import type { MovieDetails } from "./movie-details.ts";
 
-export type TranslationMode = "lineByLine" | "chunked";
-
 export type TranslateMovieData = {
   srtData: SrtData;
   movieDetails: MovieDetails;
