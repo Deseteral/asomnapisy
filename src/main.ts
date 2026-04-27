@@ -61,7 +61,7 @@ function makeTranslateMovieData(args: {
 }
 
 function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
-  LanguageModel.LanguageModel | Model.ProviderName | OpenAiClient.OpenAiClient | TmdbClient | HttpClient.HttpClient,
+  LanguageModel.LanguageModel | Model.ProviderName | OpenAiClient.OpenAiClient | TmdbClient,
   ConfigError | TmdbError,
   OpenAiClient.OpenAiClient | HttpClient.HttpClient
 > {
@@ -69,7 +69,6 @@ function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.
     OpenAiLanguageModel.model(args.model),
     makeOpenAiClientLayer(args.llmProvider),
     TmdbClient.Default,
-    FetchHttpClient.layer,
   );
 }
 
