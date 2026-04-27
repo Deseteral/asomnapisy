@@ -43,6 +43,13 @@ export function readSrtFile(path: string): Effect.Effect<SrtData, PlatformError,
   });
 }
 
+export function writeSrtFile(filePath: string, data: SrtData): Effect.Effect<void, PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.writeFileString(filePath, serializeSrt(data));
+  });
+}
+
 export function getFullText(subtitle: SrtSubtitle): string {
   return subtitle.content.join("\n");
 }
