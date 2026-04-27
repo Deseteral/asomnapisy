@@ -114,10 +114,9 @@ function translateChunk(
     return yield* singleAttempt.pipe(
       Effect.retry({ times: maxRetries }),
       Effect.catchAll(() =>
-        Effect.gen(function* () {
-          yield* Effect.logWarning(`Failed to translate chunk at index ${chunkDescriptor.chunkStart} after ${maxRetries + 1} attempts. Keeping original subtitles.`);
-          return [...chunkDescriptor.currentChunk];
-        }),
+        Effect.logWarning(`Failed to translate chunk at index ${chunkDescriptor.chunkStart} after ${maxRetries + 1} attempts. Keeping original subtitles.`).pipe(
+          Effect.as([...chunkDescriptor.currentChunk]),
+        ),
       ),
     );
   });

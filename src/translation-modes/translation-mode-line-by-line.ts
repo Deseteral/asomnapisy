@@ -7,15 +7,11 @@ export function translateMovieLineByLine(
   data: TranslateMovieData,
   params: TranslateMovieLineByLineParams,
 ): Effect.Effect<SrtData, AiError.AiError, LanguageModel.LanguageModel> {
-  return Effect.gen(function* () {
-    const translatedSubtitles = yield* Effect.forEach(
-      data.srtData.subtitles,
-      (subtitle, idx) => translateSingleSubtitle(data, params, subtitle, idx),
-      { concurrency: params.concurrency },
-    );
-
-    return { subtitles: translatedSubtitles };
-  });
+  return Effect.forEach(
+    data.srtData.subtitles,
+    (subtitle, idx) => translateSingleSubtitle(data, params, subtitle, idx),
+    { concurrency: params.concurrency },
+  ).pipe(Effect.map((subtitles) => ({ subtitles })));
 }
 
 function translateSingleSubtitle(
