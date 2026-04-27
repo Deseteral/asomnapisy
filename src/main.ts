@@ -5,7 +5,7 @@ import { FetchHttpClient, HttpClient } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
 import type { FileSystem } from "@effect/platform/FileSystem";
 import { LanguageModel, Model } from "@effect/ai";
-import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
+import { OpenAiLanguageModel } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
 import path from "node:path";
 import { readSrtFile, serializeSrt } from "./data/srt.ts";
@@ -61,15 +61,14 @@ function makeTranslateMovieData(args: {
 }
 
 function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
-  LanguageModel.LanguageModel | Model.ProviderName | OpenAiClient.OpenAiClient | TmdbClient,
+  LanguageModel.LanguageModel | Model.ProviderName | TmdbClient,
   ConfigError | TmdbError,
-  OpenAiClient.OpenAiClient | HttpClient.HttpClient
+  HttpClient.HttpClient
 > {
   return Layer.mergeAll(
     OpenAiLanguageModel.model(args.model),
-    makeOpenAiClientLayer(args.llmProvider),
     TmdbClient.Default,
-  );
+  ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider)));
 }
 
 const translateMovieLineByLineCommand = Command.make(
