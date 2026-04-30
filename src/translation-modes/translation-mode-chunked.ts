@@ -2,7 +2,7 @@ import { AiError, LanguageModel, Prompt } from "@effect/ai";
 import { Effect, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
-import { languageCodeToName, type TranslateMovieChunkedParams, type TranslateMovieData } from "../data/translation-mode.ts";
+import { languageCodeToName, type TranslateMovieData } from "../data/translation-mode.ts";
 
 class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()("ChunkTranslationError", {
   message: Schema.String,
@@ -27,6 +27,13 @@ type ChunkDescriptor = {
   contextAfter: SrtSubtitle[];
   chunkIndex: number;
   totalChunks: number;
+};
+
+export type TranslateMovieChunkedParams = {
+  chunkSize: number;
+  surroundingContextLength: number;
+  maxRetries: number;
+  concurrency: number;
 };
 
 export function translateMovieChunked(
@@ -57,7 +64,9 @@ export function translateMovieChunked(
         Effect.tap(() => Effect.logInfo(`Translated chunk ${chunkDescriptor.chunkIndex + 1}/${chunkDescriptor.totalChunks}`)),
       ),
     { concurrency: params.concurrency },
-  ).pipe(Effect.map((chunks) => ({ subtitles: chunks.flat() })));
+  ).pipe(
+    Effect.map((chunks) => ({ subtitles: chunks.flat() })),
+  );
 }
 
 function translateChunk(
@@ -114,19 +123,16 @@ function translateChunk(
     return yield* singleAttempt.pipe(
       Effect.retry({ times: maxRetries }),
       Effect.catchAll(() =>
-        Effect.logWarning(`Failed to translate chunk at index ${chunkDescriptor.chunkStart} after ${maxRetries + 1} attempts. Keeping original subtitles.`).pipe(
-          Effect.as([...chunkDescriptor.currentChunk]),
-        ),
+        Effect.logWarning(`Failed to translate chunk at index ${chunkDescriptor.chunkStart} after ${maxRetries + 1} attempts. Keeping original subtitles.`)
+          .pipe(Effect.as([...chunkDescriptor.currentChunk])),
       ),
     );
   });
 }
 
 function buildSystemPrompt(data: TranslateMovieData): string {
-  const yearText = data.movieDetails.releaseYear ? ` (${data.movieDetails.releaseYear})` : "";
-  const descriptionText = data.movieDetails.description
-    ? `Description: ${data.movieDetails.description}`
-    : "";
+  const yearText = ` (${data.movieDetails.releaseYear})`;
+  const descriptionText = `Description: ${data.movieDetails.description}`;
 
   return `
 You are a professional movie translator (${languageCodeToName(data.sourceLanguage)} to ${languageCodeToName(data.targetLanguage)}).
@@ -139,5 +145,6 @@ Rules:
 - Return a JSON object with a single key 'translations' containing the array of translated strings.
 - Parity is mandatory: the output array length MUST match the input 'translate_this' length.
 - Preserve the tone and natural spoken style.
-- Preserve '\\n' line breaks.`.trim();
+- Preserve '\\n' line breaks.
+  `.trim();
 }

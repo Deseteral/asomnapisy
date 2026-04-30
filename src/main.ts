@@ -7,19 +7,21 @@ import { LanguageModel, Model } from "@effect/ai";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
 import { readSrtFile, serializeSrt } from "./data/srt.ts";
-import type {
-  TranslateMovieChunkedParams,
-  TranslateMovieData,
-  TranslateMovieLineByLineParams,
-} from "./data/translation-mode.ts";
-import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line.ts";
-import { translateMovieChunked } from "./translation-modes/translation-mode-chunked.ts";
+import type { TranslateMovieData } from "./data/translation-mode.ts";
+import {
+  translateMovieLineByLine,
+  type TranslateMovieLineByLineParams,
+} from "./translation-modes/translation-mode-line-by-line.ts";
+import {
+  translateMovieChunked,
+  type TranslateMovieChunkedParams,
+} from "./translation-modes/translation-mode-chunked.ts";
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "./services/llm-client.ts";
 import { TmdbClient, TmdbError } from "./services/tmdb-client.ts";
 import { parseFilePath, SUPPORTED_SUBTITLE_FILE_TYPES } from "./data/subtitle-file-info.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
-  .pipe(Args.withDescription(`The path of subtitle file to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(', ')}.`));
+  .pipe(Args.withDescription(`The path of subtitle file to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`));
 const sourceLanguage = Options.text("sourceLanguage")
   .pipe(Options.withDefault("en"))
   .pipe(Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."));
@@ -118,7 +120,7 @@ const translateMovieChunkedCommand = Command.make(
 
       yield* Effect.logDebug(serializeSrt(result));
     }).pipe(Effect.provide(makeAppLayer(args))),
-).pipe(Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request cound and is more suitable for cloud models."));
+).pipe(Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."));
 
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([

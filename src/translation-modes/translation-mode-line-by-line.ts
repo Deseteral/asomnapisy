@@ -1,11 +1,12 @@
 import { AiError, LanguageModel } from "@effect/ai";
 import { Effect } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
-import {
-  languageCodeToName,
-  type TranslateMovieData,
-  type TranslateMovieLineByLineParams,
-} from "../data/translation-mode.ts";
+import { languageCodeToName, type TranslateMovieData } from "../data/translation-mode.ts";
+
+export type TranslateMovieLineByLineParams = {
+  surroundingContextLength: number;
+  concurrency: number;
+};
 
 export function translateMovieLineByLine(
   data: TranslateMovieData,
@@ -15,7 +16,9 @@ export function translateMovieLineByLine(
     data.srtData.subtitles,
     (subtitle, idx) => translateSingleSubtitle(data, params, subtitle, idx),
     { concurrency: params.concurrency },
-  ).pipe(Effect.map((subtitles) => ({ subtitles })));
+  ).pipe(
+    Effect.map((subtitles) => ({ subtitles })),
+  );
 }
 
 function translateSingleSubtitle(
@@ -42,7 +45,7 @@ function translateSingleSubtitle(
       order: subtitle.order,
       timestamp: subtitle.timestamp,
       content: response.text.split("\n"),
-    } satisfies SrtSubtitle;
+    };
   });
 }
 
@@ -51,13 +54,8 @@ function buildSystemPrompt(
   params: TranslateMovieLineByLineParams,
   currentSubtitleIdx: number,
 ): string {
-  const releaseYearText = data.movieDetails.releaseYear
-    ? ` released in ${data.movieDetails.releaseYear}`
-    : "";
-
-  const descriptionText = data.movieDetails.description
-    ? `For more context this is the description of the movie:\n\`\`\`\n${data.movieDetails.description}\n\`\`\``
-    : "";
+  const releaseYearText = ` released in ${data.movieDetails.releaseYear}`;
+  const descriptionText = `For more context this is the description of the movie:\n\`\`\`\n${data.movieDetails.description}\n\`\`\``;
 
   const [ogStart, ogEnd] =
     params.surroundingContextLength === 0
@@ -84,5 +82,6 @@ Here is a couple of lines before/after the ones I will give you so you'll know w
 \`\`\`
 ${originalLines}
 \`\`\`
-I will now provide the lines that you need to translate. Remember that they're a continuous part of the whole movie. Translate them in the context of the surrounding lines.`.trim();
+I will now provide the lines that you need to translate. Remember that they're a continuous part of the whole movie. Translate them in the context of the surrounding lines.
+  `.trim();
 }
