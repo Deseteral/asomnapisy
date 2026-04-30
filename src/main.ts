@@ -16,10 +16,10 @@ import { translateMovieLineByLine } from "./translation-modes/translation-mode-l
 import { translateMovieChunked } from "./translation-modes/translation-mode-chunked.ts";
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "./services/llm-client.ts";
 import { TmdbClient, TmdbError } from "./services/tmdb-client.ts";
-import { parseFilePath } from "./data/subtitle-file-info.ts";
+import { parseFilePath, SUPPORTED_SUBTITLE_FILE_TYPES } from "./data/subtitle-file-info.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
-  .pipe(Args.withDescription("The path of subtitle file to translate."));
+  .pipe(Args.withDescription(`The path of subtitle file to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(', ')}.`));
 const sourceLanguage = Options.text("sourceLanguage")
   .pipe(Options.withDefault("en"))
   .pipe(Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."));

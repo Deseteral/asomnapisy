@@ -1,17 +1,21 @@
-import { Data, Effect } from "effect";
+import { Data, Effect, Match } from "effect";
 import * as path from "node:path";
 
+// TODO: Add support for vtt.
+export const SUPPORTED_SUBTITLE_FILE_TYPES = ["srt"] as const;
+export type SubtitleFileType = (typeof SUPPORTED_SUBTITLE_FILE_TYPES)[number];
+
 export type SubtitleFileInfo = {
-  type: "srt",
+  type: SubtitleFileType,
   tmdbId: string,
   targetFilePath: string,
 };
 
-export class UnsupportedSubtitleFileTypeError extends Data.TaggedError("UnsupportedSubtitleFileTypeError")<{}> {}
+export class UnsupportedSubtitleFileTypeError extends Data.TaggedError("UnsupportedSubtitleFileTypeError")<object> {}
 
-export class LanguageCodeMissingError extends Data.TaggedError("LanguageCodeMissingError")<{}> {}
+export class LanguageCodeMissingError extends Data.TaggedError("LanguageCodeMissingError")<object> {}
 
-export class TmdbIdMissingError extends Data.TaggedError("TmdbIdMissingError")<{}> {}
+export class TmdbIdMissingError extends Data.TaggedError("TmdbIdMissingError")<object> {}
 
 export type SubtitleFilePathParsingError =
   | UnsupportedSubtitleFileTypeError
@@ -25,16 +29,14 @@ export function parseFilePath(
   model: string,
 ): Effect.Effect<SubtitleFileInfo, SubtitleFilePathParsingError> {
   return Effect.gen(function* () {
-    // TODO: Add support for more file types.
-    const type = "srt";
-
     const filename = path.basename(filePath);
     const dirname = path.dirname(filePath);
-    const extension = path.extname(filePath).replace(".", "");
+    const extension = path.extname(filePath);
 
-    if (extension !== "srt") {
-      return yield* Effect.fail(new UnsupportedSubtitleFileTypeError());
-    }
+    const type: SubtitleFileType = yield* Match.value(extension).pipe(
+      Match.when(".srt", () => Effect.succeed("srt" as const)),
+      Match.orElse(() => Effect.fail(new UnsupportedSubtitleFileTypeError())),
+    );
 
     if (!filename.includes(`.${sourceLanguageCode}.`)) {
       return yield* Effect.fail(new LanguageCodeMissingError());
@@ -63,11 +65,7 @@ export function parseFilePath(
 
 function replaceLast(str: string, search: string, replacement: string): string {
   const index = str.lastIndexOf(search);
-
-  if (index === -1) {
-    return str;
-  }
-
+  if (index === -1) return str;
   return str.slice(0, index) + replacement + str.slice(index + search.length);
 }
 
