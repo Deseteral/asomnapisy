@@ -10,8 +10,8 @@ export class TmdbError extends Schema.TaggedError<TmdbError>()("TmdbError", {
 
 const TmdbMovieResponse = Schema.Struct({
   original_title: Schema.String,
-  release_date: Schema.optional(Schema.String),
-  overview: Schema.optional(Schema.String),
+  release_date: Schema.String,
+  overview: Schema.String,
 });
 
 function fetchMovieDetails(
@@ -30,7 +30,7 @@ function fetchMovieDetails(
     Effect.map((json) => ({
       title: json.original_title,
       tmdbId,
-      releaseYear: json.release_date?.split("-")[0],
+      releaseYear: json.release_date.split("-")[0] || "", // TODO: Maybe error this?
       description: json.overview,
     })),
   );

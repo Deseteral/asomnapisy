@@ -3,6 +3,9 @@
   "module": "src/main.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/bun": "latest",

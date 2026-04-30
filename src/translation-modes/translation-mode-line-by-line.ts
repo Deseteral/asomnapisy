@@ -1,7 +1,11 @@
 import { AiError, LanguageModel } from "@effect/ai";
 import { Effect } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
-import { languageCodeToName, type TranslateMovieData, type TranslateMovieLineByLineParams } from "../data/translation-mode.ts";
+import {
+  languageCodeToName,
+  type TranslateMovieData,
+  type TranslateMovieLineByLineParams,
+} from "../data/translation-mode.ts";
 
 export function translateMovieLineByLine(
   data: TranslateMovieData,
@@ -32,7 +36,7 @@ function translateSingleSubtitle(
     });
 
     yield* Effect.logInfo(`Translated subtitle ${idx + 1}/${data.srtData.subtitles.length}`);
-    yield* Effect.logDebug(response.text);
+    yield* Effect.logDebug(response.text.replaceAll("\n", " "));
 
     return {
       order: subtitle.order,

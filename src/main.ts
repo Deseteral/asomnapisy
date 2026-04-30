@@ -2,19 +2,21 @@ import { Args, Command, Options } from "@effect/cli";
 import { Effect, Layer } from "effect";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { FetchHttpClient, HttpClient } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
 import type { FileSystem } from "@effect/platform/FileSystem";
 import { LanguageModel, Model } from "@effect/ai";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
-import path from "node:path";
 import { readSrtFile, serializeSrt } from "./data/srt.ts";
-import { resolveMovieDetails } from "./data/movie-details.ts";
-import type { TranslateMovieData } from "./data/translation-mode.ts";
+import type {
+  TranslateMovieChunkedParams,
+  TranslateMovieData,
+  TranslateMovieLineByLineParams,
+} from "./data/translation-mode.ts";
 import { translateMovieLineByLine } from "./translation-modes/translation-mode-line-by-line.ts";
 import { translateMovieChunked } from "./translation-modes/translation-mode-chunked.ts";
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "./services/llm-client.ts";
 import { TmdbClient, TmdbError } from "./services/tmdb-client.ts";
+import { parseFilePath } from "./data/subtitle-file-info.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
   .pipe(Args.withDescription("The path of subtitle file to translate."));
@@ -23,6 +25,9 @@ const sourceLanguage = Options.text("sourceLanguage")
   .pipe(Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."));
 const targetLanguage = Options.text("targetLanguage")
   .pipe(Options.withDescription("Language code to translate the subtitles to (e.g. pl, es, ja)."));
+// const tmdbId = Options.text("tmdbId")
+//   .pipe(Options.withDefault(null))
+//   .pipe(Options.withDescription("The Movie Database ID of given media. When missing this program will try to extract it from subtitle file name."));
 const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS)
   .pipe(Options.withDescription("LLM provider service."));
 const model = Options.text("model")
@@ -46,29 +51,27 @@ function makeTranslateMovieData(args: {
   input: string;
   sourceLanguage: string;
   targetLanguage: string;
-}): Effect.Effect<TranslateMovieData, PlatformError, FileSystem | TmdbClient> {
+  model: string;
+}): Effect.Effect<TranslateMovieData, never, FileSystem | TmdbClient> {
   return Effect.gen(function* () {
-    const srtData = yield* readSrtFile(args.input);
-    const movieDetails = yield* resolveMovieDetails(path.basename(args.input));
+    const tmdbClient = yield* TmdbClient;
+
+    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
+      .pipe(Effect.orDie);
+
+    const srtData = yield* readSrtFile(args.input)
+      .pipe(Effect.orDie);
+
+    const movieDetails = yield* tmdbClient.getMovieDetails(fileInfo.tmdbId)
+      .pipe(Effect.orDie);
 
     return {
       srtData,
       movieDetails,
       sourceLanguage: args.sourceLanguage,
       targetLanguage: args.targetLanguage,
-    } satisfies TranslateMovieData;
+    };
   });
-}
-
-function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
-  LanguageModel.LanguageModel | Model.ProviderName | TmdbClient,
-  ConfigError | TmdbError,
-  HttpClient.HttpClient
-> {
-  return Layer.mergeAll(
-    OpenAiLanguageModel.model(args.model),
-    TmdbClient.Default,
-  ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider)));
 }
 
 const translateMovieLineByLineCommand = Command.make(
@@ -77,11 +80,12 @@ const translateMovieLineByLineCommand = Command.make(
   (args) =>
     Effect.gen(function* () {
       const data = yield* makeTranslateMovieData(args);
-
-      const result = yield* translateMovieLineByLine(data, {
+      const params: TranslateMovieLineByLineParams = {
         surroundingContextLength: args.surroundingContextLength,
         concurrency: args.concurrency,
-      });
+      };
+
+      const result = yield* translateMovieLineByLine(data, params);
 
       yield* Effect.logDebug(serializeSrt(result));
     }).pipe(Effect.provide(makeAppLayer(args))),
@@ -103,13 +107,14 @@ const translateMovieChunkedCommand = Command.make(
   (args) =>
     Effect.gen(function* () {
       const data = yield* makeTranslateMovieData(args);
-
-      const result = yield* translateMovieChunked(data, {
+      const params: TranslateMovieChunkedParams = {
         chunkSize: args.chunkSize,
         surroundingContextLength: args.surroundingContextLength,
         maxRetries: args.maxRetries,
         concurrency: args.concurrency,
-      });
+      };
+
+      const result = yield* translateMovieChunked(data, params);
 
       yield* Effect.logDebug(serializeSrt(result));
     }).pipe(Effect.provide(makeAppLayer(args))),
@@ -123,6 +128,17 @@ const command = Command.make("asomnapisy").pipe(
     ),
   ]),
 );
+
+function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
+  LanguageModel.LanguageModel | Model.ProviderName | TmdbClient,
+  ConfigError | TmdbError,
+  HttpClient.HttpClient
+> {
+  return Layer.mergeAll(
+    OpenAiLanguageModel.model(args.model),
+    TmdbClient.Default,
+  ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider)));
+}
 
 const cli = Command.run(command, {
   name: "asomnapisy",
