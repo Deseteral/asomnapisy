@@ -79,19 +79,20 @@ function makeTranslateMovieData(args: {
 const translateMovieLineByLineCommand = Command.make(
   "line-by-line",
   { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
-  (args) =>
-    Effect.gen(function* () {
-      const data = yield* makeTranslateMovieData(args);
-      const params: TranslateMovieLineByLineParams = {
-        surroundingContextLength: args.surroundingContextLength,
-        concurrency: args.concurrency,
-      };
+  (args) => Effect.gen(function* () {
+    const data = yield* makeTranslateMovieData(args);
+    const params: TranslateMovieLineByLineParams = {
+      surroundingContextLength: args.surroundingContextLength,
+      concurrency: args.concurrency,
+    };
 
-      const result = yield* translateMovieLineByLine(data, params);
+    const result = yield* translateMovieLineByLine(data, params);
 
-      yield* Effect.logDebug(serializeSrt(result));
-    }).pipe(Effect.provide(makeAppLayer(args))),
-).pipe(Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."));
+    yield* Effect.logDebug(serializeSrt(result));
+  }).pipe(Effect.provide(makeLlmClientLayer(args))),
+).pipe(
+  Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."),
+);
 
 const translateMovieChunkedCommand = Command.make(
   "chunked",
@@ -106,21 +107,22 @@ const translateMovieChunkedCommand = Command.make(
     maxRetries,
     concurrency,
   },
-  (args) =>
-    Effect.gen(function* () {
-      const data = yield* makeTranslateMovieData(args);
-      const params: TranslateMovieChunkedParams = {
-        chunkSize: args.chunkSize,
-        surroundingContextLength: args.surroundingContextLength,
-        maxRetries: args.maxRetries,
-        concurrency: args.concurrency,
-      };
+  (args) => Effect.gen(function* () {
+    const data = yield* makeTranslateMovieData(args);
+    const params: TranslateMovieChunkedParams = {
+      chunkSize: args.chunkSize,
+      surroundingContextLength: args.surroundingContextLength,
+      maxRetries: args.maxRetries,
+      concurrency: args.concurrency,
+    };
 
-      const result = yield* translateMovieChunked(data, params);
+    const result = yield* translateMovieChunked(data, params);
 
-      yield* Effect.logDebug(serializeSrt(result));
-    }).pipe(Effect.provide(makeAppLayer(args))),
-).pipe(Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."));
+    yield* Effect.logDebug(serializeSrt(result));
+  }).pipe(Effect.provide(makeLlmClientLayer(args))),
+).pipe(
+  Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
+);
 
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([
@@ -131,14 +133,13 @@ const command = Command.make("asomnapisy").pipe(
   ]),
 );
 
-function makeAppLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
-  LanguageModel.LanguageModel | Model.ProviderName | TmdbClient,
+function makeLlmClientLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
+  LanguageModel.LanguageModel | Model.ProviderName,
   ConfigError | TmdbError,
   HttpClient.HttpClient
 > {
   return Layer.mergeAll(
     OpenAiLanguageModel.model(args.model),
-    TmdbClient.Default,
   ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider)));
 }
 
@@ -150,7 +151,7 @@ const cli = Command.run(command, {
 // Cast needed: TypeScript's Exclude can't reduce CliApp.Environment (FileSystem | Path | Terminal)
 // against BunContext even though all members are provided.
 const program = cli(process.argv).pipe(
-  Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer)),
+  Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer, TmdbClient.Default)),
 );
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
