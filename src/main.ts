@@ -6,6 +6,7 @@ import type { FileSystem } from "@effect/platform/FileSystem";
 import { LanguageModel, Model } from "@effect/ai";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
+import type { SrtData } from "./data/srt.ts";
 import { readSrtFile, writeSrtFile } from "./data/srt.ts";
 import type { TranslateMovieData } from "./data/translation-mode.ts";
 import {
@@ -71,26 +72,36 @@ function makeTranslateMovieData(
   });
 }
 
-const translateMovieLineByLineCommand = Command.make(
-  "line-by-line",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
-  (args) => Effect.gen(function* () {
+function runTranslation<E>(
+  args: { input: string; sourceLanguage: string; targetLanguage: string; model: string; llmProvider: LlmProvider },
+  translate: (data: TranslateMovieData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
+): Effect.Effect<void, E | PlatformError, FileSystem | TmdbClient | LanguageModel.LanguageModel> {
+  return Effect.gen(function* () {
     const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
       .pipe(Effect.orDie);
 
     const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
       .pipe(Effect.orDie);
 
+    const result = yield* translate(data);
+
+    yield* writeSrtFile(fileInfo.targetFilePath, result);
+    yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
+  });
+}
+
+const translateMovieLineByLineCommand = Command.make(
+  "line-by-line",
+  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
+  (args) => {
     const params: TranslateMovieLineByLineParams = {
       surroundingContextLength: args.surroundingContextLength,
       concurrency: args.concurrency,
     };
 
-    const result = yield* translateMovieLineByLine(data, params);
-
-    yield* writeSrtFile(fileInfo.targetFilePath, result);
-    yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
-  }).pipe(Effect.provide(makeLlmClientLayer(args))),
+    return runTranslation(args, (data) => translateMovieLineByLine(data, params))
+      .pipe(Effect.provide(makeLlmClientLayer(args)));
+  },
 ).pipe(
   Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."),
 );
@@ -108,13 +119,7 @@ const translateMovieChunkedCommand = Command.make(
     maxRetries,
     concurrency,
   },
-  (args) => Effect.gen(function* () {
-    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
-      .pipe(Effect.orDie);
-
-    const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
-      .pipe(Effect.orDie);
-
+  (args) => {
     const params: TranslateMovieChunkedParams = {
       chunkSize: args.chunkSize,
       surroundingContextLength: args.surroundingContextLength,
@@ -122,11 +127,9 @@ const translateMovieChunkedCommand = Command.make(
       concurrency: args.concurrency,
     };
 
-    const result = yield* translateMovieChunked(data, params);
-
-    yield* writeSrtFile(fileInfo.targetFilePath, result);
-    yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
-  }).pipe(Effect.provide(makeLlmClientLayer(args))),
+    return runTranslation(args, (data) => translateMovieChunked(data, params))
+      .pipe(Effect.provide(makeLlmClientLayer(args)));
+  },
 ).pipe(
   Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
 );
