@@ -6,7 +6,7 @@ import type { FileSystem } from "@effect/platform/FileSystem";
 import { LanguageModel, Model } from "@effect/ai";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
-import { readSrtFile, serializeSrt } from "./data/srt.ts";
+import { readSrtFile, writeSrtFile } from "./data/srt.ts";
 import type { TranslateMovieData } from "./data/translation-mode.ts";
 import {
   translateMovieLineByLine,
@@ -19,6 +19,7 @@ import {
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "./services/llm-client.ts";
 import { TmdbClient, TmdbError } from "./services/tmdb-client.ts";
 import { parseFilePath, SUPPORTED_SUBTITLE_FILE_TYPES } from "./data/subtitle-file-info.ts";
+import type { PlatformError } from "@effect/platform/Error";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
   .pipe(Args.withDescription(`The path of subtitle file to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`));
@@ -49,29 +50,23 @@ const maxRetries = Options.integer("maxRetries")
   .pipe(Options.withDefault(3))
   .pipe(Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."));
 
-function makeTranslateMovieData(args: {
-  input: string;
-  sourceLanguage: string;
-  targetLanguage: string;
-  model: string;
-}): Effect.Effect<TranslateMovieData, never, FileSystem | TmdbClient> {
+function makeTranslateMovieData(
+  input: string,
+  tmdbId: string,
+  sourceLanguage: string,
+  targetLanguage: string,
+): Effect.Effect<TranslateMovieData, PlatformError | TmdbError, FileSystem | TmdbClient> {
   return Effect.gen(function* () {
     const tmdbClient = yield* TmdbClient;
 
-    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
-      .pipe(Effect.orDie);
-
-    const srtData = yield* readSrtFile(args.input)
-      .pipe(Effect.orDie);
-
-    const movieDetails = yield* tmdbClient.getMovieDetails(fileInfo.tmdbId)
-      .pipe(Effect.orDie);
+    const srtData = yield* readSrtFile(input);
+    const movieDetails = yield* tmdbClient.getMovieDetails(tmdbId);
 
     return {
       srtData,
       movieDetails,
-      sourceLanguage: args.sourceLanguage,
-      targetLanguage: args.targetLanguage,
+      sourceLanguage,
+      targetLanguage,
     };
   });
 }
@@ -80,7 +75,12 @@ const translateMovieLineByLineCommand = Command.make(
   "line-by-line",
   { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
   (args) => Effect.gen(function* () {
-    const data = yield* makeTranslateMovieData(args);
+    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
+      .pipe(Effect.orDie);
+
+    const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
+      .pipe(Effect.orDie);
+
     const params: TranslateMovieLineByLineParams = {
       surroundingContextLength: args.surroundingContextLength,
       concurrency: args.concurrency,
@@ -88,7 +88,8 @@ const translateMovieLineByLineCommand = Command.make(
 
     const result = yield* translateMovieLineByLine(data, params);
 
-    yield* Effect.logDebug(serializeSrt(result));
+    yield* writeSrtFile(fileInfo.targetFilePath, result);
+    yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
   }).pipe(Effect.provide(makeLlmClientLayer(args))),
 ).pipe(
   Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."),
@@ -108,7 +109,12 @@ const translateMovieChunkedCommand = Command.make(
     concurrency,
   },
   (args) => Effect.gen(function* () {
-    const data = yield* makeTranslateMovieData(args);
+    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
+      .pipe(Effect.orDie);
+
+    const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
+      .pipe(Effect.orDie);
+
     const params: TranslateMovieChunkedParams = {
       chunkSize: args.chunkSize,
       surroundingContextLength: args.surroundingContextLength,
@@ -118,7 +124,8 @@ const translateMovieChunkedCommand = Command.make(
 
     const result = yield* translateMovieChunked(data, params);
 
-    yield* Effect.logDebug(serializeSrt(result));
+    yield* writeSrtFile(fileInfo.targetFilePath, result);
+    yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
   }).pipe(Effect.provide(makeLlmClientLayer(args))),
 ).pipe(
   Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
