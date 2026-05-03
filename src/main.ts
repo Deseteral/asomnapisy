@@ -1,7 +1,7 @@
 import { Args, Command, Options } from "@effect/cli";
 import { Effect, Layer } from "effect";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { FetchHttpClient, HttpClient } from "@effect/platform";
+import { Command as ShellCommand, FetchHttpClient, HttpClient } from "@effect/platform";
 import type { FileSystem } from "@effect/platform/FileSystem";
 import { LanguageModel, Model } from "@effect/ai";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
@@ -134,11 +134,35 @@ const translateMovieChunkedCommand = Command.make(
   Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
 );
 
+const showSubtitleTracksCommand = Command.make("show-tracks", {
+  input: Args.file({ name: "videoFile", exists: "yes" }),
+}, (args) => {
+  return Effect.gen(function* () {
+    const cmd = ShellCommand.make(
+      "ffprobe",
+      ..."-loglevel error -select_streams s -show_entries stream=index:stream_tags=language -of csv=p=0".split(" "),
+      args.input,
+    );
+    const output = yield* ShellCommand.lines(cmd);
+    const text = [
+      "Subtitle tracks in video file:",
+      output
+        .map(line => line.split(","))
+        .map(tokens => `track=${tokens[0]} language=${tokens[1]}`)
+        .join("\n"),
+    ].join("\n");
+    yield* Effect.log(text);
+  });
+});
+
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([
     Command.make("translate-movie").pipe(
       Command.withDescription("Translate movie subtitles."),
       Command.withSubcommands([translateMovieLineByLineCommand, translateMovieChunkedCommand]),
+    ),
+    Command.make("extract-subtitles").pipe(
+      Command.withSubcommands([showSubtitleTracksCommand]),
     ),
   ]),
 );
