@@ -144,14 +144,14 @@ const showSubtitleTracksCommand = Command.make("show-tracks", {
       args.input,
     );
     const output = yield* ShellCommand.lines(cmd);
-    const text = [
-      "Subtitle tracks in video file:",
-      output
-        .map(line => line.split(","))
-        .map(tokens => `track=${tokens[0]} language=${tokens[1]}`)
-        .join("\n"),
-    ].join("\n");
-    yield* Effect.log(text);
+
+    console.log(" Track │ Language");
+    console.log("───────┼──────────");
+    for (const line of output) {
+      const [track, lang] = line.split(",");
+      if (!track || !lang) continue;
+      console.log(`${track.padStart(6, " ")} │ ${lang}`);
+    }
   });
 });
 
