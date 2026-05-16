@@ -20,7 +20,9 @@ const showSubtitleTracksCommand = Command.make("show-tracks", { input }, (args) 
       console.log(`${track.padStart(6, " ")} │ ${lang}`);
     }
   });
-});
+}).pipe(
+  Command.withDescription("List available subtitle tracks in a video file."),
+);
 
 export const fromVideoCommand = Command.make("from-video").pipe(
   Command.withDescription("Get subtitle data from video file."),
