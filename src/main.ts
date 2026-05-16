@@ -2,14 +2,14 @@ import { Command } from "@effect/cli";
 import { Effect, Layer } from "effect";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { FetchHttpClient } from "@effect/platform";
-import { extractSubtitlesCommand } from "./commands/show-tracks.ts";
+import { fromVideoCommand } from "./commands/from-video.ts";
 import { translateMovieCommand } from "./commands/translate-movie.ts";
 import { TmdbClient } from "./services/tmdb-client.ts";
 
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([
     translateMovieCommand,
-    extractSubtitlesCommand,
+    fromVideoCommand,
   ]),
 );
 

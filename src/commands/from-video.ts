@@ -22,6 +22,7 @@ const showSubtitleTracksCommand = Command.make("show-tracks", { input }, (args) 
   });
 });
 
-export const extractSubtitlesCommand = Command.make("extract-subtitles").pipe(
+export const fromVideoCommand = Command.make("from-video").pipe(
+  Command.withDescription("Get subtitle data from video file."),
   Command.withSubcommands([showSubtitleTracksCommand]),
 );
