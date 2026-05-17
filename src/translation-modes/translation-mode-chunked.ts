@@ -2,7 +2,7 @@ import { AiError, LanguageModel, Prompt } from "@effect/ai";
 import { Effect, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
-import { languageCodeToName, type TranslateMovieData } from "../data/translation-mode.ts";
+import { languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
 
 class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()("ChunkTranslationError", {
   message: Schema.String,
@@ -37,7 +37,7 @@ export type TranslateMovieChunkedParams = {
 };
 
 export function translateMovieChunked(
-  data: TranslateMovieData,
+  data: SubtitleTranslationData,
   params: TranslateMovieChunkedParams,
 ): Effect.Effect<SrtData, AiError.AiError | ChunkTranslationError, LanguageModel.LanguageModel> {
   const systemPrompt = buildSystemPrompt(data);
@@ -130,13 +130,13 @@ function translateChunk(
   });
 }
 
-function buildSystemPrompt(data: TranslateMovieData): string {
-  const yearText = ` (${data.movieDetails.releaseYear})`;
-  const descriptionText = `Description: ${data.movieDetails.description}`;
+function buildSystemPrompt(data: SubtitleTranslationData): string {
+  const yearText = ` (${data.titleMetadata.releaseYear})`;
+  const descriptionText = `Description: ${data.titleMetadata.description}`;
 
   return `
 You are a professional movie translator (${languageCodeToName(data.sourceLanguage)} to ${languageCodeToName(data.targetLanguage)}).
-Movie: ${data.movieDetails.title}${yearText}
+Movie: ${data.titleMetadata.title}${yearText}
 ${descriptionText}
 
 Rules:

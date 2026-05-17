@@ -8,7 +8,7 @@ import type { ConfigError } from "effect/ConfigError";
 import { Effect, Layer } from "effect";
 import { readSrtFile, type SrtData, writeSrtFile } from "../data/srt.ts";
 import { parseFilePath, SUPPORTED_SUBTITLE_FILE_TYPES } from "../data/subtitle-file-info.ts";
-import type { TranslateMovieData } from "../data/translation-mode.ts";
+import type { SubtitleTranslationData } from "../data/translation-mode.ts";
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "../services/llm-client.ts";
 import { TmdbClient, TmdbError } from "../services/tmdb-client.ts";
 import {
@@ -52,7 +52,7 @@ function makeTranslateMovieData(
   tmdbId: string,
   sourceLanguage: string,
   targetLanguage: string,
-): Effect.Effect<TranslateMovieData, PlatformError | TmdbError, FileSystem | TmdbClient> {
+): Effect.Effect<SubtitleTranslationData, PlatformError | TmdbError, FileSystem | TmdbClient> {
   return Effect.gen(function* () {
     const tmdbClient = yield* TmdbClient;
 
@@ -60,8 +60,13 @@ function makeTranslateMovieData(
     const movieDetails = yield* tmdbClient.getMovieDetails(tmdbId);
 
     return {
+      kind: "movie" as const,
       srtData,
-      movieDetails,
+      titleMetadata: {
+        title: movieDetails.title,
+        releaseYear: movieDetails.releaseYear,
+        description: movieDetails.description,
+      },
       sourceLanguage,
       targetLanguage,
     };
@@ -70,7 +75,7 @@ function makeTranslateMovieData(
 
 function runTranslation<E>(
   args: { input: string; sourceLanguage: string; targetLanguage: string; model: string; llmProvider: LlmProvider },
-  translate: (data: TranslateMovieData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
+  translate: (data: SubtitleTranslationData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
 ): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem | TmdbClient | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
@@ -79,7 +84,7 @@ function runTranslation<E>(
     const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
       .pipe(Effect.orDie);
 
-    const sessionId = generateSessionId(data.movieDetails.title);
+    const sessionId = generateSessionId(data.titleMetadata.title);
     yield* Effect.log(`Session ID: ${sessionId}`);
 
     const result = yield* translate(data).pipe(

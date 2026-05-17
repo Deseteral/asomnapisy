@@ -1,12 +1,33 @@
 import type { SrtData } from "./srt.ts";
-import type { MovieDetails } from "./movie-details.ts";
 
-export type TranslateMovieData = {
+export type TitleMetadata = {
+  title: string;
+  releaseYear: string;
+  description: string;
+};
+
+export type EpisodeMetadata = {
+  seriesTitle: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  episodeTitle: string;
+};
+
+export type MovieContent = {
+  readonly kind: "movie";
+};
+
+export type EpisodeContent = {
+  readonly kind: "episode";
+  readonly episodeMetadata: EpisodeMetadata;
+};
+
+export type SubtitleTranslationData = {
   srtData: SrtData;
-  movieDetails: MovieDetails;
+  titleMetadata: TitleMetadata;
   sourceLanguage: string;
   targetLanguage: string;
-};
+} & (MovieContent | EpisodeContent);
 
 const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
 

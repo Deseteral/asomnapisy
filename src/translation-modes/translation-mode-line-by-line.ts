@@ -1,7 +1,7 @@
 import { AiError, LanguageModel } from "@effect/ai";
 import { Effect } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
-import { languageCodeToName, type TranslateMovieData } from "../data/translation-mode.ts";
+import { languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
 
 export type TranslateMovieLineByLineParams = {
   surroundingContextLength: number;
@@ -9,7 +9,7 @@ export type TranslateMovieLineByLineParams = {
 };
 
 export function translateMovieLineByLine(
-  data: TranslateMovieData,
+  data: SubtitleTranslationData,
   params: TranslateMovieLineByLineParams,
 ): Effect.Effect<SrtData, AiError.AiError, LanguageModel.LanguageModel> {
   return Effect.forEach(
@@ -22,7 +22,7 @@ export function translateMovieLineByLine(
 }
 
 function translateSingleSubtitle(
-  data: TranslateMovieData,
+  data: SubtitleTranslationData,
   params: TranslateMovieLineByLineParams,
   subtitle: SrtSubtitle,
   idx: number,
@@ -50,12 +50,12 @@ function translateSingleSubtitle(
 }
 
 function buildSystemPrompt(
-  data: TranslateMovieData,
+  data: SubtitleTranslationData,
   params: TranslateMovieLineByLineParams,
   currentSubtitleIdx: number,
 ): string {
-  const releaseYearText = ` released in ${data.movieDetails.releaseYear}`;
-  const descriptionText = `For more context this is the description of the movie:\n\`\`\`\n${data.movieDetails.description}\n\`\`\``;
+  const releaseYearText = ` released in ${data.titleMetadata.releaseYear}`;
+  const descriptionText = `For more context this is the description of the movie:\n\`\`\`\n${data.titleMetadata.description}\n\`\`\``;
 
   const [ogStart, ogEnd] =
     params.surroundingContextLength === 0
@@ -72,7 +72,7 @@ function buildSystemPrompt(
 
   return `
 You are a professional translator and the movie expert. You are going to translate movie subtitles.
-The movie we're translating is "${data.movieDetails.title}"${releaseYearText}.
+The movie we're translating is "${data.titleMetadata.title}"${releaseYearText}.
 ${descriptionText}
 You will be translating from ${languageCodeToName(data.sourceLanguage)} to ${languageCodeToName(data.targetLanguage)}.
 Preserve the meaning, tone, and natural spoken style. Return only the translated subtitles and nothing else.
