@@ -81,6 +81,10 @@ function runTranslation<E>(
     const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
       .pipe(Effect.orDie);
 
+    if (fileInfo.kind !== "movie") {
+      return yield* Effect.die(new Error("translate-movie command requires a movie subtitle file, not an episode file."));
+    }
+
     const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
       .pipe(Effect.orDie);
 
