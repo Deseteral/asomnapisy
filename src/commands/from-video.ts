@@ -41,6 +41,7 @@ const extractSubtitlesCommand = Command.make(
 
       yield* Effect.log(`Extracting subtitle track ${args.track} to ${outputPath}.`);
 
+      // TODO: This could use better error handling. At least show ffmpeg output in this session.
       yield* ShellCommand.make(
         "ffmpeg",
         "-i", args.input,
