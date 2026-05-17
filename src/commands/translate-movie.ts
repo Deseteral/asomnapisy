@@ -19,6 +19,7 @@ import {
   translateMovieLineByLine,
   type TranslateMovieLineByLineParams,
 } from "../translation-modes/translation-mode-line-by-line.ts";
+import { generateSessionId } from "../data/session-id.ts";
 
 const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
   .pipe(Args.withDescription(`The path of subtitle file to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`));
@@ -70,7 +71,7 @@ function makeTranslateMovieData(
 function runTranslation<E>(
   args: { input: string; sourceLanguage: string; targetLanguage: string; model: string; llmProvider: LlmProvider },
   translate: (data: TranslateMovieData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
-): Effect.Effect<void, E | PlatformError, FileSystem | TmdbClient | LanguageModel.LanguageModel> {
+): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem | TmdbClient | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
       .pipe(Effect.orDie);
@@ -78,21 +79,26 @@ function runTranslation<E>(
     const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
       .pipe(Effect.orDie);
 
-    const result = yield* translate(data);
+    const sessionId = generateSessionId(data.movieDetails.title);
+    yield* Effect.log(`Session ID: ${sessionId}`);
+
+    const result = yield* translate(data).pipe(
+      Effect.provide(makeLlmClientLayer({ ...args, sessionId })),
+    );
 
     yield* writeSrtFile(fileInfo.targetFilePath, result);
     yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
   });
 }
 
-function makeLlmClientLayer(args: { llmProvider: LlmProvider; model: string }): Layer.Layer<
+function makeLlmClientLayer(args: { llmProvider: LlmProvider; model: string; sessionId?: string }): Layer.Layer<
   LanguageModel.LanguageModel | Model.ProviderName,
   ConfigError | TmdbError,
   HttpClient.HttpClient
 > {
   return Layer.mergeAll(
     OpenAiLanguageModel.model(args.model),
-  ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider)));
+  ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider, args.sessionId)));
 }
 
 const translateMovieLineByLineCommand = Command.make(
@@ -104,8 +110,7 @@ const translateMovieLineByLineCommand = Command.make(
       concurrency: args.concurrency,
     };
 
-    return runTranslation(args, (data) => translateMovieLineByLine(data, params))
-      .pipe(Effect.provide(makeLlmClientLayer(args)));
+    return runTranslation(args, (data) => translateMovieLineByLine(data, params));
   },
 ).pipe(
   Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."),
@@ -132,8 +137,7 @@ const translateMovieChunkedCommand = Command.make(
       concurrency: args.concurrency,
     };
 
-    return runTranslation(args, (data) => translateMovieChunked(data, params))
-      .pipe(Effect.provide(makeLlmClientLayer(args)));
+    return runTranslation(args, (data) => translateMovieChunked(data, params));
   },
 ).pipe(
   Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
