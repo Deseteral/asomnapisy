@@ -3,14 +3,14 @@ import { Effect, Match } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
 
-export type TranslateMovieLineByLineParams = {
+export type TranslateLineByLineParams = {
   surroundingContextLength: number;
   concurrency: number;
 };
 
-export function translateMovieLineByLine(
+export function translateLineByLine(
   data: SubtitleTranslationData,
-  params: TranslateMovieLineByLineParams,
+  params: TranslateLineByLineParams,
 ): Effect.Effect<SrtData, AiError.AiError, LanguageModel.LanguageModel> {
   return Effect.forEach(
     data.srtData.subtitles,
@@ -23,7 +23,7 @@ export function translateMovieLineByLine(
 
 function translateSingleSubtitle(
   data: SubtitleTranslationData,
-  params: TranslateMovieLineByLineParams,
+  params: TranslateLineByLineParams,
   subtitle: SrtSubtitle,
   idx: number,
 ): Effect.Effect<SrtSubtitle, AiError.AiError, LanguageModel.LanguageModel> {
@@ -51,7 +51,7 @@ function translateSingleSubtitle(
 
 function buildSystemPrompt(
   data: SubtitleTranslationData,
-  params: TranslateMovieLineByLineParams,
+  params: TranslateLineByLineParams,
   currentSubtitleIdx: number,
 ): string {
   const contentIntro = Match.value(data).pipe(

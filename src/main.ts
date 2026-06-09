@@ -3,9 +3,8 @@ import { Effect, Layer } from "effect";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { FetchHttpClient } from "@effect/platform";
 import { fromVideoCommand } from "./commands/from-video.ts";
-import { translateMovieCommand } from "./commands/translate-movie.ts";
-import { translateSeriesCommand } from "./commands/translate-series.ts";
 import { TmdbClient } from "./services/tmdb-client.ts";
+import { translateMovieCommand, translateSeriesCommand } from "./commands/translate.ts";
 
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([

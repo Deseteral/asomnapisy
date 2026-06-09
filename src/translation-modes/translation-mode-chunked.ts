@@ -29,16 +29,16 @@ type ChunkDescriptor = {
   totalChunks: number;
 };
 
-export type TranslateMovieChunkedParams = {
+export type TranslateChunkedParams = {
   chunkSize: number;
   surroundingContextLength: number;
   maxRetries: number;
   concurrency: number;
 };
 
-export function translateMovieChunked(
+export function translateChunked(
   data: SubtitleTranslationData,
-  params: TranslateMovieChunkedParams,
+  params: TranslateChunkedParams,
 ): Effect.Effect<SrtData, AiError.AiError | ChunkTranslationError, LanguageModel.LanguageModel> {
   const systemPrompt = buildSystemPrompt(data);
   const subtitles = data.srtData.subtitles;
