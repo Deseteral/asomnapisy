@@ -4,11 +4,13 @@ import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { FetchHttpClient } from "@effect/platform";
 import { fromVideoCommand } from "./commands/from-video.ts";
 import { translateMovieCommand } from "./commands/translate-movie.ts";
+import { translateSeriesCommand } from "./commands/translate-series.ts";
 import { TmdbClient } from "./services/tmdb-client.ts";
 
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([
     translateMovieCommand,
+    translateSeriesCommand,
     fromVideoCommand,
   ]),
 );

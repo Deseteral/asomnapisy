@@ -1,8 +1,8 @@
 import { AiError, LanguageModel, Prompt } from "@effect/ai";
-import { Effect, Ref, Schema } from "effect";
+import { Effect, Match, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
-import { languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
+import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
 
 class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()("ChunkTranslationError", {
   message: Schema.String,
@@ -131,12 +131,22 @@ function translateChunk(
 }
 
 function buildSystemPrompt(data: SubtitleTranslationData): string {
-  const yearText = ` (${data.titleMetadata.releaseYear})`;
+  const contentHeader = Match.value(data).pipe(
+    Match.when({ kind: "movie" }, (d) => `
+      You are a professional movie translator (${languageCodeToName(d.sourceLanguage)} to ${languageCodeToName(d.targetLanguage)}).
+      Movie: ${d.titleMetadata.title} (${d.titleMetadata.releaseYear})
+    `),
+    Match.when({ kind: "episode" }, (d) => `
+      You are a professional TV series translator (${languageCodeToName(d.sourceLanguage)} to ${languageCodeToName(d.targetLanguage)}).
+      Series: ${d.episodeMetadata.seriesTitle}, episode ${formatAsEpisodeCode(d.episodeMetadata)} "${d.episodeMetadata.episodeTitle}"
+    `),
+    Match.exhaustive,
+  );
+
   const descriptionText = `Description: ${data.titleMetadata.description}`;
 
   return `
-You are a professional movie translator (${languageCodeToName(data.sourceLanguage)} to ${languageCodeToName(data.targetLanguage)}).
-Movie: ${data.titleMetadata.title}${yearText}
+${contentHeader}
 ${descriptionText}
 
 Rules:

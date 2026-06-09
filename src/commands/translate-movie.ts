@@ -85,8 +85,10 @@ function runTranslation<E>(
       return yield* Effect.die(new Error("translate-movie command requires a movie subtitle file, not an episode file."));
     }
 
-    const data = yield* makeTranslateMovieData(args.input, fileInfo.tmdbId, args.sourceLanguage, args.targetLanguage)
-      .pipe(Effect.orDie);
+    const data = yield* makeTranslateMovieData(
+      args.input, fileInfo.tmdbId,
+      args.sourceLanguage, args.targetLanguage
+    ).pipe(Effect.orDie);
 
     const sessionId = generateSessionId(data.titleMetadata.title);
     yield* Effect.log(`Session ID: ${sessionId}`);

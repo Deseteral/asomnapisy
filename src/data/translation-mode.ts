@@ -34,3 +34,7 @@ const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
 export function languageCodeToName(code: string): string {
   return displayNames.of(code) ?? code;
 }
+
+export function formatAsEpisodeCode(metadata: EpisodeMetadata): string {
+  return `S${String(metadata.seasonNumber).padStart(2, "0")}E${String(metadata.episodeNumber).padStart(2, "0")}`;
+}

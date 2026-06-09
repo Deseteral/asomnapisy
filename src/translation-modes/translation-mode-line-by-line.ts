@@ -1,7 +1,7 @@
 import { AiError, LanguageModel } from "@effect/ai";
-import { Effect } from "effect";
+import { Effect, Match } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
-import { languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
+import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
 
 export type TranslateMovieLineByLineParams = {
   surroundingContextLength: number;
@@ -54,8 +54,39 @@ function buildSystemPrompt(
   params: TranslateMovieLineByLineParams,
   currentSubtitleIdx: number,
 ): string {
-  const releaseYearText = ` released in ${data.titleMetadata.releaseYear}`;
-  const descriptionText = `For more context this is the description of the movie:\n\`\`\`\n${data.titleMetadata.description}\n\`\`\``;
+  const contentIntro = Match.value(data).pipe(
+    Match.when({ kind: "movie" }, (d) => `
+      You are a professional translator and the movie expert. You are going to translate movie subtitles.
+      Movie: "${d.titleMetadata.title}" released ${d.titleMetadata.releaseYear}.
+    `),
+    Match.when({ kind: "episode" }, (d) => `
+      You are a professional translator and the TV series expert. You are going to translate TV episode subtitles.
+      Series: "${d.episodeMetadata.seriesTitle}", episode ${formatAsEpisodeCode(d.episodeMetadata)} "${d.episodeMetadata.episodeTitle}".
+    `),
+    Match.exhaustive,
+  );
+
+  const descriptionText = Match.value(data).pipe(
+    Match.when({ kind: "movie" }, (d) => `
+      For more context this is the description of the movie:
+      \`\`\`
+      ${d.titleMetadata.description}
+      \`\`\`
+    `),
+    Match.when({ kind: "episode" }, (d) => `
+      For more context this is the description of the series:
+      \`\`\`
+      ${d.titleMetadata.description}
+      \`\`\`
+    `),
+    Match.exhaustive,
+  );
+
+  const contentNoun = Match.value(data).pipe(
+    Match.when({ kind: "movie" }, () => "movie"),
+    Match.when({ kind: "episode" }, () => "episode"),
+    Match.exhaustive,
+  );
 
   const [ogStart, ogEnd] =
     params.surroundingContextLength === 0
@@ -71,8 +102,7 @@ function buildSystemPrompt(
     .join("\n");
 
   return `
-You are a professional translator and the movie expert. You are going to translate movie subtitles.
-The movie we're translating is "${data.titleMetadata.title}"${releaseYearText}.
+${contentIntro}
 ${descriptionText}
 You will be translating from ${languageCodeToName(data.sourceLanguage)} to ${languageCodeToName(data.targetLanguage)}.
 Preserve the meaning, tone, and natural spoken style. Return only the translated subtitles and nothing else.
@@ -82,6 +112,6 @@ Here is a couple of lines before/after the ones I will give you so you'll know w
 \`\`\`
 ${originalLines}
 \`\`\`
-I will now provide the lines that you need to translate. Remember that they're a continuous part of the whole movie. Translate them in the context of the surrounding lines.
+I will now provide the lines that you need to translate. Remember that they're a continuous part of the whole ${contentNoun}. Translate them in the context of the surrounding lines.
   `.trim();
 }
