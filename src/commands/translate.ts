@@ -1,11 +1,11 @@
 import { LanguageModel, Model } from "@effect/ai";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { Args, Command, Options } from "@effect/cli";
-import { HttpClient } from "@effect/platform";
+import { FileSystem, HttpClient } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
-import type { FileSystem } from "@effect/platform/FileSystem";
 import type { ConfigError } from "effect/ConfigError";
-import { Effect, Layer, Match } from "effect";
+import { Array as Arr, Effect, Layer, Match, Option } from "effect";
+import * as path from "node:path";
 import { readSrtFile, type SrtData, writeSrtFile } from "../data/srt.ts";
 import { parseFilePath, type SubtitleFileInfo, SUPPORTED_SUBTITLE_FILE_TYPES } from "../data/subtitle-file-info.ts";
 import type { SubtitleTranslationData } from "../data/translation-mode.ts";
@@ -16,13 +16,10 @@ import {
   translateLineByLine,
   type TranslateLineByLineParams,
 } from "../translation-modes/translation-mode-line-by-line.ts";
-import {
-  translateChunked,
-  type TranslateChunkedParams,
-} from "../translation-modes/translation-mode-chunked.ts";
+import { translateChunked, type TranslateChunkedParams } from "../translation-modes/translation-mode-chunked.ts";
 
-const input = Args.file({ name: "sourceSubtitles", exists: "yes" })
-  .pipe(Args.withDescription(`The path of subtitle file to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`));
+const input = Args.path({ name: "sourceSubtitles", exists: "yes" })
+  .pipe(Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`));
 const sourceLanguage = Options.text("sourceLanguage")
   .pipe(Options.withDefault("en"))
   .pipe(Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."));
@@ -90,14 +87,38 @@ const chunkedCommand = Command.make(
 );
 
 export const translateCommand = Command.make("translate").pipe(
-  Command.withDescription("Translate subtitles. Automatically detects media type."),
+  Command.withDescription("Translate subtitles. Automatically detects media type. Accepts a single file or a directory for batch translation."),
   Command.withSubcommands([lineByLineCommand, chunkedCommand]),
 );
 
+type TranslationArgs = {
+  input: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  model: string;
+  llmProvider: LlmProvider;
+};
+
 function runTranslation<E>(
-  args: { input: string; sourceLanguage: string; targetLanguage: string; model: string; llmProvider: LlmProvider },
+  args: TranslationArgs,
   translate: (data: SubtitleTranslationData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
-): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem | HttpClient.HttpClient | TmdbClient> {
+): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient> {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const stat = yield* fs.stat(args.input);
+
+    yield* Match.value(stat.type).pipe(
+      Match.when("File", () => runSingleTranslation(args, translate)),
+      Match.when("Directory", () => runBatchTranslation(args, translate)),
+      Match.orElse(() => Effect.void),
+    );
+  });
+}
+
+function runSingleTranslation<E>(
+  args: TranslationArgs,
+  translate: (data: SubtitleTranslationData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
+): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient> {
   return Effect.gen(function* () {
     const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
       .pipe(Effect.orDie);
@@ -120,12 +141,71 @@ function runTranslation<E>(
   });
 }
 
+type BatchFileEntry = {
+  filePath: string;
+  fileInfo: SubtitleFileInfo;
+};
+
+function runBatchTranslation<E>(
+  args: TranslationArgs,
+  translate: (data: SubtitleTranslationData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
+): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient> {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const entries = yield* discoverFilesToBatchProcess(args.input, args.sourceLanguage, args.targetLanguage, args.model);
+
+    if (entries.length === 0) {
+      yield* Effect.log(`No matching subtitle files found in ${args.input}.`);
+      return;
+    }
+
+    yield* Effect.log(`Found ${entries.length} subtitle files in ${args.input}.`);
+
+    let completedCount = 0;
+    let skippedCount = 0;
+    const failed: BatchFileEntry[] = [];
+
+    for (const entry of entries) {
+      const targetExists = yield* fs.exists(entry.fileInfo.targetFilePath);
+      if (targetExists) {
+        yield* Effect.log(`  ${entry.filePath} - skipped (target exists).`);
+        skippedCount++;
+        continue;
+      }
+
+      const translationArgs: TranslationArgs = { ...args, input: entry.filePath };
+      const translationWasSuccessful = yield* runSingleTranslation(translationArgs, translate).pipe(
+        Effect.map(() => true),
+        Effect.catchAll((error) =>
+          Effect.logError(`  ${entry.filePath} - failed: ${String(error)}.`)
+            .pipe(Effect.as(false)),
+        ),
+      );
+
+      if (translationWasSuccessful) {
+        completedCount++;
+      } else {
+        failed.push(entry);
+      }
+    }
+
+    yield* Effect.log(`\nBatch complete: ${completedCount} translated, ${skippedCount} skipped, ${failed.length} failed.`);
+
+    if (failed.length > 0) {
+      yield* Effect.log("Failed:");
+      for (const failedEntry of failed) {
+        yield* Effect.log(`  ${failedEntry.filePath}`);
+      }
+    }
+  });
+}
+
 function fetchData(
   inputPath: string,
   fileInfo: SubtitleFileInfo,
   sourceLanguage: string,
   targetLanguage: string,
-): Effect.Effect<SubtitleTranslationData, PlatformError | TmdbError, FileSystem | TmdbClient> {
+): Effect.Effect<SubtitleTranslationData, PlatformError | TmdbError, FileSystem.FileSystem | TmdbClient> {
   return Effect.gen(function* () {
     const tmdbClient = yield* TmdbClient;
     const srtData = yield* readSrtFile(inputPath);
@@ -169,6 +249,34 @@ function fetchData(
       }),
       Match.exhaustive,
     );
+  });
+}
+
+function discoverFilesToBatchProcess(
+  dirPath: string,
+  sourceLanguage: string,
+  targetLanguage: string,
+  model: string,
+): Effect.Effect<BatchFileEntry[], PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const entries = yield* fs.readDirectory(dirPath);
+
+    const suffix = `.${sourceLanguage}.srt`;
+    const candidateFiles = entries.filter((entry) => entry.endsWith(suffix));
+
+    const parsed = yield* Effect.forEach(candidateFiles, (filename) => {
+      const filePath = path.join(dirPath, filename);
+      return parseFilePath(filePath, sourceLanguage, targetLanguage, model).pipe(
+        Effect.map((fileInfo): Option.Option<BatchFileEntry> => Option.some({ filePath, fileInfo })),
+        Effect.catchAll((error) =>
+          Effect.logWarning(`Skipping ${filename}: ${error._tag}.`)
+            .pipe(Effect.as(Option.none<BatchFileEntry>())),
+        ),
+      );
+    });
+
+    return Arr.getSomes(parsed);
   });
 }
 
