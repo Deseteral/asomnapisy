@@ -47,7 +47,7 @@ const maxRetries = Options.integer("maxRetries")
   .pipe(Options.withDefault(3))
   .pipe(Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."));
 
-const translateMovieLineByLineCommand = Command.make(
+const lineByLineCommand = Command.make(
   "line-by-line",
   { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
   (args) => {
@@ -62,7 +62,7 @@ const translateMovieLineByLineCommand = Command.make(
   Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."),
 );
 
-const translateMovieChunkedCommand = Command.make(
+const chunkedCommand = Command.make(
   "chunked",
   {
     input,
@@ -89,56 +89,9 @@ const translateMovieChunkedCommand = Command.make(
   Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
 );
 
-export const translateMovieCommand = Command.make("translate-movie").pipe(
-  Command.withDescription("Translate movie subtitles."),
-  Command.withSubcommands([translateMovieLineByLineCommand, translateMovieChunkedCommand]),
-);
-
-const translateSeriesLineByLineCommand = Command.make(
-  "line-by-line",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
-  (args) => {
-    const params: TranslateLineByLineParams = {
-      surroundingContextLength: args.surroundingContextLength,
-      concurrency: args.concurrency,
-    };
-
-    return runTranslation(args, (data) => translateLineByLine(data, params));
-  },
-).pipe(
-  Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."),
-);
-
-const translateSeriesChunkedCommand = Command.make(
-  "chunked",
-  {
-    input,
-    sourceLanguage,
-    targetLanguage,
-    llmProvider,
-    model,
-    chunkSize,
-    surroundingContextLength,
-    maxRetries,
-    concurrency,
-  },
-  (args) => {
-    const params: TranslateChunkedParams = {
-      chunkSize: args.chunkSize,
-      surroundingContextLength: args.surroundingContextLength,
-      maxRetries: args.maxRetries,
-      concurrency: args.concurrency,
-    };
-
-    return runTranslation(args, (data) => translateChunked(data, params));
-  },
-).pipe(
-  Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
-);
-
-export const translateSeriesCommand = Command.make("translate-series").pipe(
-  Command.withDescription("Translate TV series episode subtitles."),
-  Command.withSubcommands([translateSeriesLineByLineCommand, translateSeriesChunkedCommand]),
+export const translateCommand = Command.make("translate").pipe(
+  Command.withDescription("Translate subtitles. Automatically detects media type."),
+  Command.withSubcommands([lineByLineCommand, chunkedCommand]),
 );
 
 function runTranslation<E>(
@@ -159,9 +112,8 @@ function runTranslation<E>(
     const sessionId = generateSessionId(data.titleMetadata.title);
     yield* Effect.log(`Session ID: ${sessionId}`);
 
-    const result = yield* translate(data).pipe(
-      Effect.provide(makeLlmClientLayer({ ...args, sessionId })),
-    );
+    const result = yield* translate(data)
+      .pipe(Effect.provide(makeLlmClientLayer({ ...args, sessionId })));
 
     yield* writeSrtFile(fileInfo.targetFilePath, result);
     yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
