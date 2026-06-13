@@ -1,5 +1,6 @@
 import { Data, Effect, Match } from "effect";
 import * as path from "node:path";
+import { slugify } from "../utils.ts";
 
 // TODO: Add support for vtt.
 export const SUPPORTED_SUBTITLE_FILE_TYPES = ["srt"] as const;
@@ -76,7 +77,7 @@ export function parseFilePath(
     const targetFileName = replaceLast(
       filename,
       `.${sourceLanguageCode}.`,
-      `.${model}.${targetLanguageCode}.`,
+      `.${slugify(model)}.${targetLanguageCode}.`,
     );
 
     const targetFilePath = path.join(dirname, targetFileName);
