@@ -14,6 +14,16 @@ function makeOllamaClient(): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpC
   });
 }
 
+function makeLmStudioClient(): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
+  return OpenAiClient.layerConfig({
+    apiUrl: Config.string("LMSTUDIO_URL").pipe(
+      Config.withDefault("http://localhost:1234"),
+      Config.map((url) => `${url}/v1`),
+    ),
+    apiKey: Config.succeed(Redacted.make("lmstudio")),
+  });
+}
+
 function makeOpenRouterClient(sessionId?: string): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
   const headers: Record<string, string> = {
     "X-OpenRouter-Title": "asomnapisy",
@@ -31,12 +41,17 @@ function makeOpenRouterClient(sessionId?: string): Layer<OpenAiClient.OpenAiClie
   });
 }
 
-export const LLM_PROVIDERS = ["ollama", "openrouter"] as const;
+export const LLM_PROVIDERS = [
+  "ollama",
+  "lmstudio",
+  "openrouter",
+] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
 export function makeOpenAiClientLayer(provider: LlmProvider, sessionId?: string): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
   return Match.value(provider).pipe(
     Match.when("ollama", () => makeOllamaClient()),
+    Match.when("lmstudio", () => makeLmStudioClient()),
     Match.when("openrouter", () => makeOpenRouterClient(sessionId)),
     Match.exhaustive,
   );
