@@ -286,6 +286,6 @@ function makeLlmClientLayer(args: { llmProvider: LlmProvider; model: string; ses
   HttpClient.HttpClient
 > {
   return Layer.mergeAll(
-    OpenAiLanguageModel.model(args.model),
+    OpenAiLanguageModel.model(args.model, { reasoning: { effort: "none" } }),
   ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider, args.sessionId)));
 }
