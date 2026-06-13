@@ -41,6 +41,8 @@ function translateSingleSubtitle(
     yield* Effect.logInfo(`Translated subtitle ${idx + 1}/${data.srtData.subtitles.length}`);
     yield* Effect.logDebug(response.text.replaceAll("\n", " "));
 
+    console.log(response.text);
+    
     return {
       order: subtitle.order,
       timestamp: subtitle.timestamp,
