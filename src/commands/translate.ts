@@ -36,6 +36,9 @@ const surroundingContextLength = Options.integer("surroundingContextLength")
 const concurrency = Options.integer("concurrency")
   .pipe(Options.withDefault(1))
   .pipe(Options.withDescription("Number of subtitles to translate in parallel."));
+const reasoning = Options.boolean("reasoning")
+  .pipe(Options.withDefault(false))
+  .pipe(Options.withDescription("Enable LLM reasoning."));
 
 const chunkSize = Options.integer("chunkSize")
   .pipe(Options.withDefault(30))
@@ -46,7 +49,7 @@ const maxRetries = Options.integer("maxRetries")
 
 const lineByLineCommand = Command.make(
   "line-by-line",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency },
+  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency, reasoning },
   (args) => {
     const params: TranslateLineByLineParams = {
       surroundingContextLength: args.surroundingContextLength,
@@ -71,6 +74,7 @@ const chunkedCommand = Command.make(
     surroundingContextLength,
     maxRetries,
     concurrency,
+    reasoning,
   },
   (args) => {
     const params: TranslateChunkedParams = {
@@ -97,6 +101,7 @@ type TranslationArgs = {
   targetLanguage: string;
   model: string;
   llmProvider: LlmProvider;
+  reasoning: boolean;
 };
 
 function runTranslation<E>(
@@ -280,12 +285,12 @@ function discoverFilesToBatchProcess(
   });
 }
 
-function makeLlmClientLayer(args: { llmProvider: LlmProvider; model: string; sessionId?: string }): Layer.Layer<
+function makeLlmClientLayer(args: { llmProvider: LlmProvider; model: string; reasoning: boolean; sessionId?: string }): Layer.Layer<
   LanguageModel.LanguageModel | Model.ProviderName,
   ConfigError | TmdbError,
   HttpClient.HttpClient
 > {
   return Layer.mergeAll(
-    OpenAiLanguageModel.model(args.model, { reasoning: { effort: "none" } }),
+    OpenAiLanguageModel.model(args.model, { reasoning: { effort: args.reasoning ? "minimal" : "none" } }),
   ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider, args.sessionId)));
 }
