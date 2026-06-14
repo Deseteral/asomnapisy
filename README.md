@@ -41,7 +41,7 @@ Provide these environment variables when required:
 - `LMSTUDIO_URL` - when using LM Studio as provider (defaults to `http://localhost:1234`).
 
 ## Build
-This program is built with [Bun](https://bun.sh), TypeScript, and [EffectS](https://effect.website).
+This program is built with [Bun](https://bun.sh), TypeScript, and [Effect](https://effect.website).
 
 No build step required — Bun runs TypeScript directly.
 
