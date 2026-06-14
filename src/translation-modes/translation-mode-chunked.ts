@@ -112,12 +112,12 @@ function translateChunk(
         };
       }) satisfies SrtSubtitle[];
     }).pipe(
-      Effect.tapError((error) => Ref.update(messagesRef, (messages) =>
-        [
-          ...messages,
-          { role: "user" as const, content: `Fix your response: ${error.message}` },
-        ],
-      )),
+      Effect.tapError((error) =>
+        Effect.logError(`Chunk ${chunkDescriptor.chunkStart}: ${error._tag}: ${error.message}`)
+          .pipe(Effect.zipRight(Ref.update(messagesRef, (messages) =>
+            [...messages, { role: "user" as const, content: `Fix your response: ${error.message}` }],
+          ))),
+      ),
     );
 
     return yield* singleAttempt.pipe(

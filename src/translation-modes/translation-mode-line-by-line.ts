@@ -42,7 +42,7 @@ function translateSingleSubtitle(
     yield* Effect.logDebug(response.text.replaceAll("\n", " "));
 
     console.log(response.text);
-    
+
     return {
       order: subtitle.order,
       timestamp: subtitle.timestamp,
