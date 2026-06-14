@@ -167,7 +167,8 @@ function runBatchTranslation<E>(
 ): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient> {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const entries = yield* discoverFilesToBatchProcess(args.input, args.sourceLanguage, args.targetLanguage, args.model);
+    const entries = (yield* discoverFilesToBatchProcess(args.input, args.sourceLanguage, args.targetLanguage, args.model))
+      .toSorted((a,b) => a.filePath.localeCompare(b.filePath));
 
     if (entries.length === 0) {
       yield* Effect.log(`No matching subtitle files found in ${args.input}.`);
@@ -183,10 +184,12 @@ function runBatchTranslation<E>(
     for (const entry of entries) {
       const targetExists = yield* fs.exists(entry.fileInfo.targetFilePath);
       if (targetExists) {
-        yield* Effect.log(`  ${entry.filePath} - skipped (target exists).`);
+        yield* Effect.log(`${entry.filePath} - skipped (target exists).`);
         skippedCount++;
         continue;
       }
+
+      yield* Effect.log(`Translating ${entry.filePath}.`);
 
       const translationArgs: TranslationArgs = { ...args, input: entry.filePath };
       const translationWasSuccessful = yield* runSingleTranslation(translationArgs, translate).pipe(
