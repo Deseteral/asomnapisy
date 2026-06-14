@@ -145,7 +145,7 @@ function runSingleTranslation<E>(
       args.targetLanguage,
     ).pipe(Effect.orDie);
 
-    const sessionId = generateSessionId(data.titleMetadata.title);
+    const sessionId = generateSessionId(data);
     yield* Effect.log(`Session ID: ${sessionId}`);
 
     const result = yield* translate(data)

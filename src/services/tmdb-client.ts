@@ -122,5 +122,4 @@ export class TmdbClient extends Effect.Service<TmdbClient>()("TmdbClient", {
     };
   }),
   dependencies: [FetchHttpClient.layer],
-}) {
-}
+}) {}

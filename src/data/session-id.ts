@@ -1,6 +1,14 @@
+import { Match } from "effect";
 import { slugify } from "../utils";
+import { formatAsEpisodeCode, type SubtitleTranslationData } from "./translation-mode.ts";
 
-export function generateSessionId(mediaTitle: string): string {
+export function generateSessionId(data: SubtitleTranslationData): string {
+  const mediaTitle = Match.value(data).pipe(
+    Match.when({ kind: "movie" }, (d) => d.titleMetadata.title),
+    Match.when({ kind: "episode" }, (d) => `${d.titleMetadata.title}-${formatAsEpisodeCode(d.episodeMetadata)}`),
+    Match.exhaustive,
+  );
+
   const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, "");
   return `asomnapisy-${timestamp}-${slugify(mediaTitle)}`;
 }
