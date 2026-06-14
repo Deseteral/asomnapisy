@@ -18,34 +18,44 @@ import {
 } from "../translation-modes/translation-mode-line-by-line.ts";
 import { translateChunked, type TranslateChunkedParams } from "../translation-modes/translation-mode-chunked.ts";
 
-const input = Args.path({ name: "sourceSubtitles", exists: "yes" })
-  .pipe(Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`));
-const sourceLanguage = Options.text("sourceLanguage")
-  .pipe(Options.withDefault("en"))
-  .pipe(Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."));
-const targetLanguage = Options.text("targetLanguage")
-  .pipe(Options.withDescription("Language code to translate the subtitles to (e.g. pl, es, ja)."));
-const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS)
-  .pipe(Options.withDescription("LLM provider service."));
-const model = Options.text("model")
-  .pipe(Options.withDescription("LLM model identifier."));
+const input = Args.path({ name: "sourceSubtitles", exists: "yes" }).pipe(
+  Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`),
+);
+const sourceLanguage = Options.text("sourceLanguage").pipe(
+  Options.withDefault("en"),
+  Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."),
+);
+const targetLanguage = Options.text("targetLanguage").pipe(
+  Options.withDescription("Language code to translate the subtitles to (e.g. pl, es, ja)."),
+);
+const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS).pipe(
+  Options.withDescription("LLM provider service."),
+);
+const model = Options.text("model").pipe(
+  Options.withDescription("LLM model identifier."),
+);
 
-const surroundingContextLength = Options.integer("surroundingContextLength")
-  .pipe(Options.withDefault(5))
-  .pipe(Options.withDescription("Amount of lines before and after translated ones in context."));
-const concurrency = Options.integer("concurrency")
-  .pipe(Options.withDefault(1))
-  .pipe(Options.withDescription("Number of subtitles to translate in parallel."));
-const reasoning = Options.boolean("reasoning")
-  .pipe(Options.withDefault(false))
-  .pipe(Options.withDescription("Enable LLM reasoning."));
+const surroundingContextLength = Options.integer("surroundingContextLength").pipe(
+  Options.withDefault(5),
+  Options.withDescription("Amount of lines before and after translated ones in context."),
+);
+const concurrency = Options.integer("concurrency").pipe(
+  Options.withDefault(1),
+  Options.withDescription("Number of subtitles to translate in parallel."),
+);
+const reasoning = Options.boolean("reasoning").pipe(
+  Options.withDefault(false),
+  Options.withDescription("Enable LLM reasoning."),
+);
 
-const chunkSize = Options.integer("chunkSize")
-  .pipe(Options.withDefault(30))
-  .pipe(Options.withDescription("The amount of lines in a single translation chunk."));
-const maxRetries = Options.integer("maxRetries")
-  .pipe(Options.withDefault(3))
-  .pipe(Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."));
+const chunkSize = Options.integer("chunkSize").pipe(
+  Options.withDefault(30),
+  Options.withDescription("The amount of lines in a single translation chunk."),
+);
+const maxRetries = Options.integer("maxRetries").pipe(
+  Options.withDefault(3),
+  Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."),
+);
 
 const lineByLineCommand = Command.make(
   "line-by-line",
@@ -285,7 +295,12 @@ function discoverFilesToBatchProcess(
   });
 }
 
-function makeLlmClientLayer(args: { llmProvider: LlmProvider; model: string; reasoning: boolean; sessionId?: string }): Layer.Layer<
+function makeLlmClientLayer(args: {
+  llmProvider: LlmProvider;
+  model: string;
+  reasoning: boolean;
+  sessionId?: string
+}): Layer.Layer<
   LanguageModel.LanguageModel | Model.ProviderName,
   ConfigError | TmdbError,
   HttpClient.HttpClient

@@ -5,8 +5,9 @@ import * as path from "node:path";
 import type { PlatformError } from "@effect/platform/Error";
 import { terminalReadline } from "../utils.ts";
 
-const input = Args.file({ name: "videoFile", exists: "yes" })
-  .pipe(Args.withDescription("Video file with source subtitles."));
+const input = Args.file({ name: "videoFile", exists: "yes" }).pipe(
+  Args.withDescription("Video file with source subtitles."),
+);
 
 function printTracks(filePath: string): Effect.Effect<void, PlatformError, CommandExecutor.CommandExecutor> {
   return Effect.gen(function* () {
