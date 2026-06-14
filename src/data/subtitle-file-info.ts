@@ -1,6 +1,6 @@
 import { Data, Effect, Match } from "effect";
 import * as path from "node:path";
-import { slugify } from "../utils.ts";
+import { stringReplaceLast, slugify } from "../utils.ts";
 
 // TODO: Add support for vtt.
 export const SUPPORTED_SUBTITLE_FILE_TYPES = ["srt"] as const;
@@ -74,7 +74,7 @@ export function parseFilePath(
       return yield* Effect.fail(new TmdbIdMissingError());
     }
 
-    const targetFileName = replaceLast(
+    const targetFileName = stringReplaceLast(
       filename,
       `.${sourceLanguageCode}.`,
       `.${slugify(model)}.${targetLanguageCode}.`,
@@ -109,10 +109,3 @@ export function parseFilePath(
     };
   });
 }
-
-function replaceLast(str: string, search: string, replacement: string): string {
-  const index = str.lastIndexOf(search);
-  if (index === -1) return str;
-  return str.slice(0, index) + replacement + str.slice(index + search.length);
-}
-

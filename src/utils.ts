@@ -22,3 +22,8 @@ export function terminalReadline(message: string): Effect.Effect<string> {
   });
 }
 
+export function stringReplaceLast(str: string, search: string, replacement: string): string {
+  const index = str.lastIndexOf(search);
+  if (index === -1) return str;
+  return str.slice(0, index) + replacement + str.slice(index + search.length);
+}
