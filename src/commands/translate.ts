@@ -1,4 +1,4 @@
-import { LanguageModel, Model } from "@effect/ai";
+import { LanguageModel } from "@effect/ai";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { Args, Command, Options } from "@effect/cli";
 import { FileSystem, HttpClient } from "@effect/platform";
@@ -301,11 +301,12 @@ function makeLlmClientLayer(args: {
   reasoning: boolean;
   sessionId?: string
 }): Layer.Layer<
-  LanguageModel.LanguageModel | Model.ProviderName,
-  ConfigError | TmdbError,
+  LanguageModel.LanguageModel,
+  ConfigError,
   HttpClient.HttpClient
 > {
-  return Layer.mergeAll(
-    OpenAiLanguageModel.model(args.model, { reasoning: { effort: args.reasoning ? "minimal" : "none" } }),
-  ).pipe(Layer.provide(makeOpenAiClientLayer(args.llmProvider, args.sessionId)));
+  const model = OpenAiLanguageModel.model(args.model, { reasoning: { effort: args.reasoning ? "minimal" : "none" } }).pipe(
+    Layer.provide(makeOpenAiClientLayer(args.llmProvider, args.sessionId)),
+  );
+  return Layer.mergeAll(model);
 }

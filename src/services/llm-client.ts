@@ -4,7 +4,9 @@ import { OpenAiClient } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
 import type { Layer } from "effect/Layer";
 
-function makeOllamaClient(): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
+type LlmClientLayer = Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient>;
+
+function makeOllamaClient(): LlmClientLayer {
   return OpenAiClient.layerConfig({
     apiUrl: Config.string("OLLAMA_URL").pipe(
       Config.withDefault("http://localhost:11434"),
@@ -14,7 +16,7 @@ function makeOllamaClient(): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpC
   });
 }
 
-function makeLmStudioClient(): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
+function makeLmStudioClient(): LlmClientLayer {
   return OpenAiClient.layerConfig({
     apiUrl: Config.string("LMSTUDIO_URL").pipe(
       Config.withDefault("http://localhost:1234"),
@@ -24,20 +26,18 @@ function makeLmStudioClient(): Layer<OpenAiClient.OpenAiClient, ConfigError, Htt
   });
 }
 
-function makeOpenRouterClient(sessionId?: string): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
+function makeOpenRouterClient(sessionId?: string): LlmClientLayer {
   const headers: Record<string, string> = {
     "X-OpenRouter-Title": "asomnapisy",
+    ...(sessionId && { "X-Session-Id": sessionId }),
   };
-
-  if (sessionId) {
-    headers["X-Session-Id"] = sessionId;
-  }
 
   return OpenAiClient.layerConfig({
     apiUrl: Config.succeed("https://openrouter.ai/api/v1"),
     apiKey: Config.redacted("OPENROUTER_API_KEY"),
-    transformClient: (client) =>
-      client.pipe(HttpClient.mapRequest(HttpClientRequest.setHeaders(headers))),
+    transformClient: (client) => client.pipe(
+      HttpClient.mapRequest(HttpClientRequest.setHeaders(headers)),
+    ),
   });
 }
 
@@ -48,7 +48,7 @@ export const LLM_PROVIDERS = [
 ] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
-export function makeOpenAiClientLayer(provider: LlmProvider, sessionId?: string): Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient> {
+export function makeOpenAiClientLayer(provider: LlmProvider, sessionId?: string): LlmClientLayer {
   return Match.value(provider).pipe(
     Match.when("ollama", () => makeOllamaClient()),
     Match.when("lmstudio", () => makeLmStudioClient()),
