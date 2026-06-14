@@ -6,9 +6,10 @@ CLI tool for translating movie subtitles using LLMs.
 
 - Two translation modes: **line-by-line** (one subtitle at a time) and **chunked** (batches of lines with retry logic).
 - Supports [OpenRouter](https://openrouter.ai/), [LM Studio](https://lmstudio.ai/) and [Ollama](https://ollama.com/) as LLM providers.
-- Provied high quality translations by providing surrounding subtitles for additional translation context.
+- Provides high quality translations by the way of supplying surrounding subtitles for additional translation context.
 - Integrates with TMDB to fetch media description for more translation context.
 - Batch processing of entire directories (for episodic content for example).
+- Extracts subtitles from video files (requires `ffmpeg`).
 
 ## Usage
 
@@ -43,7 +44,7 @@ Provide these environment variables when required:
 ## Build
 This program is built with [Bun](https://bun.sh), TypeScript, and [Effect](https://effect.website).
 
-No build step required — Bun runs TypeScript directly.
+No build step required - Bun runs TypeScript directly.
 
 ```bash
 bun install
