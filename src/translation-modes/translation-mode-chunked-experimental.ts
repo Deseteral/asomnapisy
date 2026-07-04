@@ -1,5 +1,5 @@
 import { AiError, LanguageModel, Prompt } from "@effect/ai";
-import { Effect, Match, Ref, Schema } from "effect";
+import { Array as Arr, Effect, Either, Match, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
 import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
@@ -11,14 +11,13 @@ class ChunkExperimentalTranslationError extends Schema.TaggedError<ChunkExperime
   },
 ) {}
 
-type ChunkDescriptor = {
-  currentChunk: SrtSubtitle[];
-  chunkStart: number;
+type TranslationError = ChunkExperimentalTranslationError | AiError.AiError;
+
+type Chunk = {
+  subtitles: SrtSubtitle[];
   contextBefore: SrtSubtitle[];
   contextAfter: SrtSubtitle[];
-  chunkIndex: number;
-  totalChunks: number;
-  splitPath: string;
+  label: string;
 };
 
 export type TranslateChunkedExperimentalParams = {
@@ -34,79 +33,178 @@ export function translateChunkedExperimental(
 ): Effect.Effect<SrtData, never, LanguageModel.LanguageModel> {
   return Effect.gen(function* () {
     const systemPrompt = buildSystemPrompt(data);
-    const subtitles = data.srtData.subtitles;
-    const totalChunks = Math.ceil(subtitles.length / params.chunkSize);
+    const chunks = makeChunks(data.srtData.subtitles, params);
 
-    const completedRef = yield* Ref.make(0);
+    yield* Effect.logInfo(`Translating ${data.srtData.subtitles.length} subtitles in ${chunks.length} chunks.`);
+    yield* Effect.logDebug("Parameters", params);
 
-    yield* Effect.logInfo(`Translating ${subtitles.length} subtitles in ${totalChunks} chunks.`);
-    yield* Effect.logDebug(`Parameters`, params);
+    const completedCount = yield* Ref.make(0);
 
-    const chunkDescriptors: ChunkDescriptor[] = [];
-    for (let chunkStart = 0; chunkStart < subtitles.length; chunkStart += params.chunkSize) {
-      const chunkEnd = Math.min(chunkStart + params.chunkSize, subtitles.length);
-      chunkDescriptors.push({
-        currentChunk: subtitles.slice(chunkStart, chunkEnd),
-        chunkStart,
-        contextBefore: subtitles.slice(Math.max(chunkStart - params.surroundingContextLength, 0), chunkStart),
-        contextAfter: subtitles.slice(chunkEnd, Math.min(chunkEnd + params.surroundingContextLength, subtitles.length)),
-        chunkIndex: chunkDescriptors.length,
-        totalChunks,
-        splitPath: `${chunkDescriptors.length + 1}`,
-      });
-    }
-
-    const result = yield* Effect.forEach(
-      chunkDescriptors,
-      (chunkDescriptor) =>
-        translateChunkWithSplitting(systemPrompt, chunkDescriptor, params.maxRetries).pipe(
-          Effect.tap(() =>
-            Ref.updateAndGet(completedRef, (n) => n + 1).pipe(
-              Effect.flatMap((completed) =>
-                Effect.logInfo(`Translated experimental chunk ${chunkDescriptor.splitPath} (${completed}/${totalChunks})`),
-              ),
-            ),
-          ),
+    const logProgress = (chunk: Chunk): Effect.Effect<void> =>
+      Ref.updateAndGet(completedCount, (n) => n + 1).pipe(
+        Effect.flatMap((completed) =>
+          Effect.logInfo(`Translated chunk ${chunk.label} (${completed}/${chunks.length})`),
         ),
+      );
+
+    const translated = yield* Effect.forEach(
+      chunks,
+      (chunk) => translateChunk(systemPrompt, chunk, params.maxRetries).pipe(Effect.tap(() => logProgress(chunk))),
       { concurrency: params.concurrency },
     );
 
-    yield* Effect.logInfo("Experimental translation complete.");
+    yield* Effect.logInfo("Translation complete.");
 
-    return { subtitles: result.flat() };
+    return { subtitles: translated.flat() };
   });
 }
 
-function translateChunkWithSplitting(
+function makeChunks(subtitles: SrtSubtitle[], params: TranslateChunkedExperimentalParams): Chunk[] {
+  return Arr.chunksOf(subtitles, params.chunkSize).map((chunk, index) => {
+    const start = index * params.chunkSize;
+    const end = start + chunk.length;
+
+    return {
+      subtitles: chunk,
+      contextBefore: subtitles.slice(Math.max(start - params.surroundingContextLength, 0), start),
+      contextAfter: subtitles.slice(end, end + params.surroundingContextLength),
+      label: `${index + 1}`,
+    };
+  });
+}
+
+/**
+ * Translates a chunk, retrying with repair prompts. If all attempts fail, the chunk is
+ * split in half and each half is translated recursively. Single subtitles that still
+ * fail are kept untranslated, so this never fails as a whole.
+ */
+function translateChunk(
   systemPrompt: string,
-  chunkDescriptor: ChunkDescriptor,
+  chunk: Chunk,
   maxRetries: number,
 ): Effect.Effect<SrtSubtitle[], never, LanguageModel.LanguageModel> {
-  return translateChunkAttempt(systemPrompt, chunkDescriptor, maxRetries).pipe(
-    Effect.catchAll((error) => {
-      if (chunkDescriptor.currentChunk.length <= 1) {
-        const singleSubtitle = chunkDescriptor.currentChunk[0];
-        const orderLabel = singleSubtitle?.order ?? "?";
-        return Effect.logWarning(
-          `Experimental chunk ${chunkDescriptor.splitPath}: failed to translate subtitle ${orderLabel} after ${maxRetries + 1} attempts. Keeping original subtitle.`,
-        ).pipe(Effect.as([...chunkDescriptor.currentChunk]));
+  const initialMessages: Prompt.MessageEncoded[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: buildUserPrompt(chunk) },
+  ];
+
+  return attemptTranslation(chunk, initialMessages, maxRetries)
+    .pipe(Effect.catchAll((error) => {
+      if (chunk.subtitles.length === 1) {
+        const orderLabel = chunk.subtitles[0]?.order;
+        return Effect.succeed(chunk.subtitles)
+          .pipe(Effect.tap(() =>
+            Effect.logWarning(`Chunk ${chunk.label}: failed to translate subtitle ${orderLabel} after ${maxRetries + 1} attempts. Keeping original subtitle.`),
+          ));
       }
 
-      const [left, right] = splitChunkDescriptor(chunkDescriptor);
+      const [left, right] = splitChunk(chunk);
 
-      return Effect.logWarning(
-        `Experimental chunk ${chunkDescriptor.splitPath}: ${error.message}. Splitting ${chunkDescriptor.currentChunk.length} subtitles into ${left.currentChunk.length} + ${right.currentChunk.length}.`,
-      ).pipe(
-        Effect.zipRight(
-          Effect.all([
-            translateChunkWithSplitting(systemPrompt, left, maxRetries),
-            translateChunkWithSplitting(systemPrompt, right, maxRetries),
-          ]),
-        ),
-        Effect.map(([leftResult, rightResult]) => [...leftResult, ...rightResult]),
-      );
-    }),
+      return Effect.logWarning(`Chunk ${chunk.label}: ${error.message}. Splitting ${chunk.subtitles.length} subtitles into ${left.subtitles.length} + ${right.subtitles.length}.`)
+        .pipe(
+          Effect.zipRight(Effect.all([
+            translateChunk(systemPrompt, left, maxRetries),
+            translateChunk(systemPrompt, right, maxRetries),
+          ])),
+          Effect.map(([leftResult, rightResult]) => [...leftResult, ...rightResult]),
+        );
+    }));
+}
+
+/**
+ * Requests a translation, retrying up to `retriesLeft` more times. Each failed attempt
+ * appends a repair message to the conversation before retrying.
+ */
+function attemptTranslation(
+  chunk: Chunk,
+  messages: Prompt.MessageEncoded[],
+  retriesLeft: number,
+): Effect.Effect<SrtSubtitle[], TranslationError, LanguageModel.LanguageModel> {
+  const requestTranslation = (chunk: Chunk, messages: Prompt.MessageEncoded[]): Effect.Effect<SrtSubtitle[], TranslationError, LanguageModel.LanguageModel> => Effect.gen(function* () {
+    const response = yield* LanguageModel.generateText({ prompt: messages });
+
+    const requestedIds = new Set(chunk.subtitles.map((s) => s.order));
+    const translations = yield* parseTaggedSubtitles(response.text, requestedIds);
+
+    return chunk.subtitles.map((subtitle) => ({
+      ...subtitle,
+      content: translations.get(subtitle.order) ?? subtitle.content,
+    }));
+  });
+
+  const repairMessage = (error: TranslationError): Prompt.MessageEncoded => ({
+    role: "user",
+    content:
+      `Your previous response could not be parsed: ${error.message}.\nReturn ONLY valid <subtitle id="...">...</subtitle> blocks for the requested subtitles. Do not include context, explanations, markdown, or code fences.`,
+  });
+
+
+  return requestTranslation(chunk, messages).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning(`Chunk ${chunk.label}: attempt failed (${error._tag}: ${error.message}). Retrying with repair prompt.`),
+    ),
+    Effect.catchAll((error) =>
+      retriesLeft > 0
+        ? attemptTranslation(chunk, [...messages, repairMessage(error)], retriesLeft - 1)
+        : Effect.fail(error),
+    ),
   );
+}
+
+const SUBTITLE_TAG_REGEX = /<subtitle\s+id=["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/subtitle>/gi;
+
+function parseTaggedSubtitles(
+  rawText: string,
+  requestedIds: ReadonlySet<string>,
+): Either.Either<Map<string, string[]>, ChunkExperimentalTranslationError> {
+  const translations = new Map<string, string[]>();
+
+  for (const [, id, rawContent] of rawText.matchAll(SUBTITLE_TAG_REGEX)) {
+    if (!id || !rawContent) continue;
+
+    if (translations.has(id)) {
+      return Either.left(new ChunkExperimentalTranslationError({ message: `Duplicate subtitle id: ${id}` }));
+    }
+
+    const content = rawContent.replace(/\r\n/g, "\n").trim();
+    if (content.length === 0) {
+      return Either.left(new ChunkExperimentalTranslationError({ message: `Empty translation for subtitle id: ${id}` }));
+    }
+
+    translations.set(id, content.split("\n"));
+  }
+
+  if (translations.size === 0) {
+    return Either.left(new ChunkExperimentalTranslationError({ message: "No valid <subtitle> tags found in response." }));
+  }
+
+  const missingIds = [...requestedIds].filter((id) => !translations.has(id));
+  if (missingIds.length > 0) {
+    return Either.left(new ChunkExperimentalTranslationError({ message: `Missing subtitle ids: ${missingIds.join(", ")}` }));
+  }
+
+  return Either.right(translations);
+}
+
+function splitChunk(chunk: Chunk): [Chunk, Chunk] {
+  const midpoint = Math.ceil(chunk.subtitles.length / 2);
+  const left = chunk.subtitles.slice(0, midpoint);
+  const right = chunk.subtitles.slice(midpoint);
+
+  return [
+    {
+      subtitles: left,
+      contextBefore: chunk.contextBefore,
+      contextAfter: [...right, ...chunk.contextAfter],
+      label: `${chunk.label}-L`,
+    },
+    {
+      subtitles: right,
+      contextBefore: [...chunk.contextBefore, ...left],
+      contextAfter: chunk.contextAfter,
+      label: `${chunk.label}-R`,
+    },
+  ];
 }
 
 function buildSystemPrompt(data: SubtitleTranslationData): string {
@@ -122,11 +220,9 @@ function buildSystemPrompt(data: SubtitleTranslationData): string {
     Match.exhaustive,
   );
 
-  const descriptionText = `Description: ${data.titleMetadata.description}`;
-
   return `
 ${contentHeader}
-${descriptionText}
+Description: ${data.titleMetadata.description}
 
 Rules:
 - Input will have "Context before", "Translate these subtitles", and "Context after" sections.
@@ -138,161 +234,16 @@ Rules:
   `.trim();
 }
 
-function formatSubtitleBlock(subtitle: SrtSubtitle): string {
-  return `<subtitle id="${subtitle.order}">\n${getFullText(subtitle)}\n</subtitle>`;
+function buildUserPrompt(chunk: Chunk): string {
+  const formatSubtitleBlock = (subtitle: SrtSubtitle): string =>
+    `<subtitle id="${subtitle.order}">\n${getFullText(subtitle)}\n</subtitle>`;
+
+  const section = (header: string, subtitles: SrtSubtitle[]): string[] =>
+    subtitles.length > 0 ? [header, subtitles.map(formatSubtitleBlock).join("\n")] : [];
+
+  return [
+    ...section("Context before:", chunk.contextBefore),
+    ...section("Translate these subtitles:", chunk.subtitles),
+    ...section("Context after:", chunk.contextAfter),
+  ].join("\n\n");
 }
-
-function buildUserPrompt(chunkDescriptor: ChunkDescriptor): string {
-  const parts: string[] = [];
-
-  if (chunkDescriptor.contextBefore.length > 0) {
-    parts.push("Context before:");
-    parts.push(chunkDescriptor.contextBefore.map(formatSubtitleBlock).join("\n"));
-  }
-
-  parts.push("Translate these subtitles:");
-  parts.push(chunkDescriptor.currentChunk.map(formatSubtitleBlock).join("\n"));
-
-  if (chunkDescriptor.contextAfter.length > 0) {
-    parts.push("Context after:");
-    parts.push(chunkDescriptor.contextAfter.map(formatSubtitleBlock).join("\n"));
-  }
-
-  return parts.join("\n\n");
-}
-
-function parseTaggedSubtitleTranslations(
-  rawText: string,
-  requestedIds: Set<string>,
-): Effect.Effect<Map<string, string[]>, ChunkExperimentalTranslationError> {
-  const tagRegex = /<subtitle\s+id=["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\/subtitle>/gi;
-  const parsedMap = new Map<string, string[]>();
-  const seenIds = new Set<string>();
-
-  let match: RegExpExecArray | null;
-  while ((match = tagRegex.exec(rawText)) !== null) {
-    const id = match[1];
-    const contentRaw = match[2];
-
-    if (id === undefined || contentRaw === undefined) {
-      continue;
-    }
-
-    const content = contentRaw.replace(/\r\n/g, "\n");
-
-    if (seenIds.has(id)) {
-      return Effect.fail(new ChunkExperimentalTranslationError({
-        message: `Duplicate subtitle id: ${id}`,
-      }));
-    }
-
-    if (content.trim().length === 0) {
-      return Effect.fail(new ChunkExperimentalTranslationError({
-        message: `Empty translation for subtitle id: ${id}`,
-      }));
-    }
-
-    seenIds.add(id);
-    parsedMap.set(id, content.split("\n"));
-  }
-
-  if (parsedMap.size === 0) {
-    return Effect.fail(new ChunkExperimentalTranslationError({
-      message: "No valid <subtitle> tags found in response.",
-    }));
-  }
-
-  const missingIds: string[] = [];
-  for (const id of requestedIds) {
-    if (!parsedMap.has(id)) {
-      missingIds.push(id);
-    }
-  }
-
-  if (missingIds.length > 0) {
-    return Effect.fail(new ChunkExperimentalTranslationError({
-      message: `Missing subtitle ids: ${missingIds.join(", ")}`,
-    }));
-  }
-
-  return Effect.succeed(parsedMap);
-}
-
-function translateChunkAttempt(
-  systemPrompt: string,
-  chunkDescriptor: ChunkDescriptor,
-  maxRetries: number,
-): Effect.Effect<SrtSubtitle[], ChunkExperimentalTranslationError | AiError.AiError, LanguageModel.LanguageModel> {
-  return Effect.gen(function* () {
-    const userPrompt = buildUserPrompt(chunkDescriptor);
-
-    const messagesRef = yield* Ref.make<Array<Prompt.MessageEncoded>>([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ]);
-
-    const singleAttempt = Effect.gen(function* () {
-      const messages = yield* Ref.get(messagesRef);
-
-      const response = yield* LanguageModel.generateText({ prompt: messages });
-      const rawText = response.text;
-
-      const requestedIds = new Set(chunkDescriptor.currentChunk.map((s) => s.order));
-      const parsed = yield* parseTaggedSubtitleTranslations(rawText, requestedIds);
-
-      return chunkDescriptor.currentChunk.map((subtitle) => {
-        const translation = parsed.get(subtitle.order);
-        return {
-          order: subtitle.order,
-          timestamp: subtitle.timestamp,
-          content: translation ?? subtitle.content,
-        } satisfies SrtSubtitle;
-      });
-    }).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning(`Experimental chunk ${chunkDescriptor.splitPath}: attempt failed (${error._tag}: ${error.message}). Retrying with repair prompt.`)
-          .pipe(Effect.zipRight(Ref.update(messagesRef, (messages) => [
-            ...messages,
-            {
-              role: "user" as const,
-              content:
-                `Your previous response could not be parsed: ${error.message}.\nReturn ONLY valid <subtitle id="...">...</subtitle> blocks for the requested subtitles. Do not include context, explanations, markdown, or code fences.`,
-            },
-          ]))),
-      ),
-    );
-
-    return yield* singleAttempt.pipe(
-      Effect.retry({ times: maxRetries }),
-    );
-  });
-}
-
-function splitChunkDescriptor(chunkDescriptor: ChunkDescriptor): [ChunkDescriptor, ChunkDescriptor] {
-  const midpoint = Math.ceil(chunkDescriptor.currentChunk.length / 2);
-  const leftHalf = chunkDescriptor.currentChunk.slice(0, midpoint);
-  const rightHalf = chunkDescriptor.currentChunk.slice(midpoint);
-
-  const left: ChunkDescriptor = {
-    currentChunk: leftHalf,
-    chunkStart: chunkDescriptor.chunkStart,
-    contextBefore: chunkDescriptor.contextBefore,
-    contextAfter: [...rightHalf, ...chunkDescriptor.contextAfter],
-    chunkIndex: chunkDescriptor.chunkIndex,
-    totalChunks: chunkDescriptor.totalChunks,
-    splitPath: `${chunkDescriptor.splitPath}-L`,
-  };
-
-  const right: ChunkDescriptor = {
-    currentChunk: rightHalf,
-    chunkStart: chunkDescriptor.chunkStart + leftHalf.length,
-    contextBefore: [...chunkDescriptor.contextBefore, ...leftHalf],
-    contextAfter: chunkDescriptor.contextAfter,
-    chunkIndex: chunkDescriptor.chunkIndex,
-    totalChunks: chunkDescriptor.totalChunks,
-    splitPath: `${chunkDescriptor.splitPath}-R`,
-  };
-
-  return [left, right];
-}
-
