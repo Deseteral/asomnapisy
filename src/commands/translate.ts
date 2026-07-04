@@ -12,15 +12,7 @@ import type { SubtitleTranslationData } from "../data/translation-mode.ts";
 import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "../services/llm-client.ts";
 import { TmdbClient, type TmdbError } from "../services/tmdb-client.ts";
 import { generateSessionId } from "../data/session-id.ts";
-import {
-  translateLineByLine,
-  type TranslateLineByLineParams,
-} from "../translation-modes/translation-mode-line-by-line.ts";
-import { translateChunked, type TranslateChunkedParams } from "../translation-modes/translation-mode-chunked.ts";
-import {
-  translateChunkedExperimental,
-  type TranslateChunkedExperimentalParams,
-} from "../translation-modes/translation-mode-chunked-experimental.ts";
+import { translateChunked, type TranslateChunkedParams } from "../translation-modes/chunked-translation-mode.ts";
 
 const input = Args.path({ name: "sourceSubtitles", exists: "yes" }).pipe(
   Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`),
@@ -61,23 +53,8 @@ const maxRetries = Options.integer("maxRetries").pipe(
   Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."),
 );
 
-const lineByLineCommand = Command.make(
-  "line-by-line",
-  { input, sourceLanguage, targetLanguage, llmProvider, model, surroundingContextLength, concurrency, reasoning },
-  (args) => {
-    const params: TranslateLineByLineParams = {
-      surroundingContextLength: args.surroundingContextLength,
-      concurrency: args.concurrency,
-    };
-
-    return runTranslation(args, (data) => translateLineByLine(data, params));
-  },
-).pipe(
-  Command.withDescription("line-by-line mode requests a single line translation from LLM. This is more suitable for locally running models."),
-);
-
-const chunkedCommand = Command.make(
-  "chunked",
+export const translateCommand = Command.make(
+  "translate",
   {
     input,
     sourceLanguage,
@@ -101,40 +78,7 @@ const chunkedCommand = Command.make(
     return runTranslation(args, (data) => translateChunked(data, params));
   },
 ).pipe(
-  Command.withDescription("chunked mode divides all lines into groups and translates them in batches. This reduces request count and is more suitable for cloud models."),
-);
-
-const chunkedExperimentalCommand = Command.make(
-  "chunked-experimental",
-  {
-    input,
-    sourceLanguage,
-    targetLanguage,
-    llmProvider,
-    model,
-    chunkSize,
-    surroundingContextLength,
-    maxRetries,
-    concurrency,
-    reasoning,
-  },
-  (args) => {
-    const params: TranslateChunkedExperimentalParams = {
-      chunkSize: args.chunkSize,
-      surroundingContextLength: args.surroundingContextLength,
-      maxRetries: args.maxRetries,
-      concurrency: args.concurrency,
-    };
-
-    return runTranslation(args, (data) => translateChunkedExperimental(data, params));
-  },
-).pipe(
-  Command.withDescription("chunked-experimental mode uses tagged text format instead of JSON, making it more suitable for locally running models. Automatically splits failing chunks and falls back gracefully."),
-);
-
-export const translateCommand = Command.make("translate").pipe(
   Command.withDescription("Translate subtitles. Automatically detects media type. Accepts a single file or a directory for batch translation."),
-  Command.withSubcommands([lineByLineCommand, chunkedCommand, chunkedExperimentalCommand]),
 );
 
 type TranslationArgs = {

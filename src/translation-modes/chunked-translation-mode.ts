@@ -4,14 +4,14 @@ import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
 import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
 
-class ChunkExperimentalTranslationError extends Schema.TaggedError<ChunkExperimentalTranslationError>()(
-  "ChunkExperimentalTranslationError",
+class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()(
+  "ChunkTranslationError",
   {
     message: Schema.String,
   },
 ) {}
 
-type TranslationError = ChunkExperimentalTranslationError | AiError.AiError;
+type TranslationError = ChunkTranslationError | AiError.AiError;
 
 type Chunk = {
   subtitles: SrtSubtitle[];
@@ -20,16 +20,16 @@ type Chunk = {
   label: string;
 };
 
-export type TranslateChunkedExperimentalParams = {
+export type TranslateChunkedParams = {
   chunkSize: number;
   surroundingContextLength: number;
   maxRetries: number;
   concurrency: number;
 };
 
-export function translateChunkedExperimental(
+export function translateChunked(
   data: SubtitleTranslationData,
-  params: TranslateChunkedExperimentalParams,
+  params: TranslateChunkedParams,
 ): Effect.Effect<SrtData, never, LanguageModel.LanguageModel> {
   return Effect.gen(function* () {
     const systemPrompt = buildSystemPrompt(data);
@@ -59,7 +59,7 @@ export function translateChunkedExperimental(
   });
 }
 
-function makeChunks(subtitles: SrtSubtitle[], params: TranslateChunkedExperimentalParams): Chunk[] {
+function makeChunks(subtitles: SrtSubtitle[], params: TranslateChunkedParams): Chunk[] {
   return Arr.chunksOf(subtitles, params.chunkSize).map((chunk, index) => {
     const start = index * params.chunkSize;
     const end = start + chunk.length;
@@ -156,31 +156,31 @@ const SUBTITLE_TAG_REGEX = /<subtitle\s+id=["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\
 function parseTaggedSubtitles(
   rawText: string,
   requestedIds: ReadonlySet<string>,
-): Either.Either<Map<string, string[]>, ChunkExperimentalTranslationError> {
+): Either.Either<Map<string, string[]>, ChunkTranslationError> {
   const translations = new Map<string, string[]>();
 
   for (const [, id, rawContent] of rawText.matchAll(SUBTITLE_TAG_REGEX)) {
     if (!id || !rawContent) continue;
 
     if (translations.has(id)) {
-      return Either.left(new ChunkExperimentalTranslationError({ message: `Duplicate subtitle id: ${id}` }));
+      return Either.left(new ChunkTranslationError({ message: `Duplicate subtitle id: ${id}` }));
     }
 
     const content = rawContent.replace(/\r\n/g, "\n").trim();
     if (content.length === 0) {
-      return Either.left(new ChunkExperimentalTranslationError({ message: `Empty translation for subtitle id: ${id}` }));
+      return Either.left(new ChunkTranslationError({ message: `Empty translation for subtitle id: ${id}` }));
     }
 
     translations.set(id, content.split("\n"));
   }
 
   if (translations.size === 0) {
-    return Either.left(new ChunkExperimentalTranslationError({ message: "No valid <subtitle> tags found in response." }));
+    return Either.left(new ChunkTranslationError({ message: "No valid <subtitle> tags found in response." }));
   }
 
   const missingIds = [...requestedIds].filter((id) => !translations.has(id));
   if (missingIds.length > 0) {
-    return Either.left(new ChunkExperimentalTranslationError({ message: `Missing subtitle ids: ${missingIds.join(", ")}` }));
+    return Either.left(new ChunkTranslationError({ message: `Missing subtitle ids: ${missingIds.join(", ")}` }));
   }
 
   return Either.right(translations);
