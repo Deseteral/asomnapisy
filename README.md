@@ -4,7 +4,6 @@ CLI tool for translating movie subtitles using LLMs.
 
 ## Features
 
-- Two translation modes: **line-by-line** (one subtitle at a time) and **chunked** (batches of lines with retry logic).
 - Supports [OpenRouter](https://openrouter.ai/), [LM Studio](https://lmstudio.ai/) and [Ollama](https://ollama.com/) as LLM providers.
 - Provides high quality translations by the way of supplying surrounding subtitles for additional translation context.
 - Integrates with TMDB to fetch media description for more translation context.
@@ -14,22 +13,9 @@ CLI tool for translating movie subtitles using LLMs.
 ## Usage
 
 ```bash
-# Translate a single file line by line
-asomnapisy translate line-by-line <file.srt> \
-  --targetLanguage pl \
-  --llmProvider openrouter \
-  --model <model-id>
-
-# Translate in chunks (batches)
-asomnapisy translate chunked <file.srt> \
+asomnapisy translate <file.srt> \
   --targetLanguage pl \
   --llmProvider lmstudio \
-  --model <model-id>
-
-# Batch translate a directory
-asomnapisy translate chunked <directory> \
-  --targetLanguage pl \
-  --llmProvider ollama \
   --model <model-id>
 ```
 
