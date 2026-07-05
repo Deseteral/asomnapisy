@@ -110,6 +110,17 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
         }),
       );
 
-    return { load, save, clear };
+    const clearAll = (): Effect.Effect<void> =>
+      semaphore.withPermits(1)(
+        Effect.gen(function* () {
+          yield* fs.remove(cacheDir(), { recursive: true, force: true }).pipe(
+            Effect.catchAll((error: PlatformError) =>
+              Effect.logWarning(`Failed to clear cache directory: ${error.message}`),
+            ),
+          );
+        }),
+      );
+
+    return { load, save, clear, clearAll };
   }),
 }) {}

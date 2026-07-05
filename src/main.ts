@@ -6,11 +6,13 @@ import { TmdbClient } from "./services/tmdb-client";
 import { TranslationCache } from "./services/translation-cache";
 import { translateCommand } from "./commands/translate";
 import { extractCommand } from "./commands/extract.ts";
+import { clearCacheCommand } from "./commands/clear-cache.ts";
 
 const command = Command.make("asomnapisy").pipe(
   Command.withSubcommands([
     translateCommand,
     extractCommand,
+    clearCacheCommand,
   ]),
 );
 
