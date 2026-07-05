@@ -3,6 +3,7 @@ import { Array as Arr, Effect, Either, Match, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
 import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-data.ts";
+import { TranslationCache } from "../services/translation-cache.ts";
 
 class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()(
   "ChunkTranslationError",
@@ -14,10 +15,10 @@ class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()(
 type TranslationError = ChunkTranslationError | AiError.AiError;
 
 type Chunk = {
+  id: string;
   subtitles: SrtSubtitle[];
   contextBefore: SrtSubtitle[];
   contextAfter: SrtSubtitle[];
-  label: string;
 };
 
 export type TranslateChunkedParams = {
@@ -30,32 +31,59 @@ export type TranslateChunkedParams = {
 export function translateChunked(
   data: SubtitleTranslationData,
   params: TranslateChunkedParams,
-): Effect.Effect<SrtData, never, LanguageModel.LanguageModel> {
+  sessionId: string,
+): Effect.Effect<SrtData, never, LanguageModel.LanguageModel | TranslationCache> {
   return Effect.gen(function* () {
     const systemPrompt = buildSystemPrompt(data);
+    const cache = yield* TranslationCache;
+
+    const cached = yield* cache.load(sessionId);
     const chunks = makeChunks(data.srtData.subtitles, params);
 
-    yield* Effect.logInfo(`Translating ${data.srtData.subtitles.length} subtitles in ${chunks.length} chunks.`);
+    const cachedCount = chunks.filter((c) => cached.has(c.id)).length;
+
+    if (cachedCount > 0) {
+      yield* Effect.logInfo(`Restored ${cachedCount}/${chunks.length} chunks from cache.`);
+    }
+
+    if (cachedCount === chunks.length) {
+      yield* Effect.logInfo("All chunks are cached, skipping LLM translation.");
+      return {
+        subtitles: chunks.flatMap((c) => cached.get(c.id) ?? c.subtitles),
+      };
+    }
+
+    yield* Effect.logInfo(`Translating ${data.srtData.subtitles.length} subtitles in ${chunks.length} chunks (${chunks.length - cachedCount} uncached).`);
     yield* Effect.logDebug("Parameters", params);
 
-    const completedCount = yield* Ref.make(0);
+    const completedCount = yield* Ref.make(cachedCount);
 
     const logProgress = (chunk: Chunk): Effect.Effect<void> =>
       Ref.updateAndGet(completedCount, (n) => n + 1).pipe(
         Effect.flatMap((completed) =>
-          Effect.logInfo(`Translated chunk ${chunk.label} (${completed}/${chunks.length})`),
+          Effect.logInfo(`Translated chunk ${chunk.id} (${completed}/${chunks.length})`),
         ),
       );
 
-    const translated = yield* Effect.forEach(
-      chunks,
-      (chunk) => translateChunk(systemPrompt, chunk, params.maxRetries).pipe(Effect.tap(() => logProgress(chunk))),
-      { concurrency: params.concurrency },
+    const translated = new Map(
+      yield* Effect.forEach(
+        chunks.filter((c) => !cached.has(c.id)),
+        (chunk) => translateChunk(systemPrompt, chunk, params.maxRetries).pipe(
+          Effect.tap((result) => cache.save(sessionId, chunk.id, result)),
+          Effect.tap(() => logProgress(chunk)),
+          Effect.map((result) => [chunk.id, result] as const),
+        ),
+        { concurrency: params.concurrency },
+      ),
     );
 
     yield* Effect.logInfo("Translation complete.");
 
-    return { subtitles: translated.flat() };
+    return {
+      subtitles: chunks.flatMap((chunk) =>
+        cached.get(chunk.id) || translated.get(chunk.id) || chunk.subtitles,
+      ),
+    };
   });
 }
 
@@ -65,10 +93,10 @@ function makeChunks(subtitles: SrtSubtitle[], params: TranslateChunkedParams): C
     const end = start + chunk.length;
 
     return {
+      id: `chunk-${index}`,
       subtitles: chunk,
       contextBefore: subtitles.slice(Math.max(start - params.surroundingContextLength, 0), start),
       contextAfter: subtitles.slice(end, end + params.surroundingContextLength),
-      label: `${index + 1}`,
     };
   });
 }
@@ -94,13 +122,13 @@ function translateChunk(
         const orderLabel = chunk.subtitles[0]?.order;
         return Effect.succeed(chunk.subtitles)
           .pipe(Effect.tap(() =>
-            Effect.logWarning(`Chunk ${chunk.label}: failed to translate subtitle ${orderLabel} after ${maxRetries + 1} attempts. Keeping original subtitle.`),
+            Effect.logWarning(`Chunk ${chunk.id}: failed to translate subtitle ${orderLabel} after ${maxRetries + 1} attempts. Keeping original subtitle.`),
           ));
       }
 
       const [left, right] = splitChunk(chunk);
 
-      return Effect.logWarning(`Chunk ${chunk.label}: ${error.message}. Splitting ${chunk.subtitles.length} subtitles into ${left.subtitles.length} + ${right.subtitles.length}.`)
+      return Effect.logWarning(`Chunk ${chunk.id}: ${error.message}. Splitting ${chunk.subtitles.length} subtitles into ${left.subtitles.length} + ${right.subtitles.length}.`)
         .pipe(
           Effect.zipRight(Effect.all([
             translateChunk(systemPrompt, left, maxRetries),
@@ -141,7 +169,7 @@ function attemptTranslation(
 
   return requestTranslation(chunk, messages).pipe(
     Effect.tapError((error) =>
-      Effect.logWarning(`Chunk ${chunk.label}: attempt failed (${error._tag}: ${error.message}). Retrying with repair prompt.`),
+      Effect.logWarning(`Chunk ${chunk.id}: attempt failed (${error._tag}: ${error.message}). Retrying with repair prompt.`),
     ),
     Effect.catchAll((error) =>
       retriesLeft > 0
@@ -196,13 +224,13 @@ function splitChunk(chunk: Chunk): [Chunk, Chunk] {
       subtitles: left,
       contextBefore: chunk.contextBefore,
       contextAfter: [...right, ...chunk.contextAfter],
-      label: `${chunk.label}-L`,
+      id: `${chunk.id}-L`,
     },
     {
       subtitles: right,
       contextBefore: [...chunk.contextBefore, ...left],
       contextAfter: chunk.contextAfter,
-      label: `${chunk.label}-R`,
+      id: `${chunk.id}-R`,
     },
   ];
 }

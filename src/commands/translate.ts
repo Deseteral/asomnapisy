@@ -15,7 +15,8 @@ import type { SubtitleTranslationData } from "../data/translation-data.ts";
 import { generateSessionId } from "../data/session-id.ts";
 import { LLM_PROVIDERS, makeLanguageModelLayer, type LlmProvider } from "../services/llm-client.ts";
 import { TmdbClient, type TmdbError } from "../services/tmdb-client.ts";
-import { translateChunked } from "../translation/chunked-translation.ts";
+import { TranslationCache } from "../services/translation-cache.ts";
+import { translateChunked, type TranslateChunkedParams } from "../translation/chunked-translation.ts";
 
 const input = Args.path({ name: "sourceSubtitles", exists: "yes" }).pipe(
   Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`),
@@ -70,7 +71,7 @@ type TranslateArgs = {
 };
 
 type TranslateError = PlatformError | ConfigError | TmdbError | SubtitleFileParsingError;
-type TranslateEnv = FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient;
+type TranslateEnv = FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient | TranslationCache;
 
 export const translateCommand = Command.make(
   "translate",
@@ -109,7 +110,7 @@ function runSingleTranslation(args: TranslateArgs): Effect.Effect<void, Translat
     const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model);
     const data = yield* fetchTranslationData(args.input, fileInfo, args.sourceLanguage, args.targetLanguage);
 
-    const sessionId = generateSessionId(data);
+    const sessionId = generateSessionId(data, args.model, args.chunkSize, args.surroundingContextLength);
     yield* Effect.log(`Session ID: ${sessionId}`);
 
     const languageModel = makeLanguageModelLayer({
@@ -119,15 +120,21 @@ function runSingleTranslation(args: TranslateArgs): Effect.Effect<void, Translat
       sessionId,
     });
 
-    const result = yield* translateChunked(data, {
+    const params: TranslateChunkedParams = {
       chunkSize: args.chunkSize,
       surroundingContextLength: args.surroundingContextLength,
       maxRetries: args.maxRetries,
       concurrency: args.concurrency,
-    }).pipe(Effect.provide(languageModel));
+    };
+
+    const result = yield* translateChunked(data, params, sessionId)
+      .pipe(Effect.provide(languageModel));
 
     yield* writeSrtFile(fileInfo.targetFilePath, result);
     yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
+
+    const cache = yield* TranslationCache;
+    yield* cache.clear(sessionId);
   });
 }
 
