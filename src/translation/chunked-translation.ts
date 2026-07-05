@@ -31,13 +31,13 @@ export type TranslateChunkedParams = {
 export function translateChunked(
   data: SubtitleTranslationData,
   params: TranslateChunkedParams,
-  sessionId: string,
+  cacheId: string,
 ): Effect.Effect<SrtData, never, LanguageModel.LanguageModel | TranslationCache> {
   return Effect.gen(function* () {
     const systemPrompt = buildSystemPrompt(data);
     const cache = yield* TranslationCache;
 
-    const cached = yield* cache.load(sessionId);
+    const cached = yield* cache.load(cacheId);
     const chunks = makeChunks(data.srtData.subtitles, params);
 
     const cachedCount = chunks.filter((c) => cached.has(c.id)).length;
@@ -69,7 +69,7 @@ export function translateChunked(
       yield* Effect.forEach(
         chunks.filter((c) => !cached.has(c.id)),
         (chunk) => translateChunk(systemPrompt, chunk, params.maxRetries).pipe(
-          Effect.tap((result) => cache.save(sessionId, chunk.id, result)),
+          Effect.tap((result) => cache.save(cacheId, chunk.id, result)),
           Effect.tap(() => logProgress(chunk)),
           Effect.map((result) => [chunk.id, result] as const),
         ),

@@ -12,7 +12,7 @@ import {
   SUPPORTED_SUBTITLE_FILE_TYPES,
 } from "../data/subtitle-file-info.ts";
 import type { SubtitleTranslationData } from "../data/translation-data.ts";
-import { generateSessionId } from "../data/session-id.ts";
+import { generateCacheId, generateSessionId } from "../data/session-id.ts";
 import { LLM_PROVIDERS, makeLanguageModelLayer, type LlmProvider } from "../services/llm-client.ts";
 import { TmdbClient, type TmdbError } from "../services/tmdb-client.ts";
 import { TranslationCache } from "../services/translation-cache.ts";
@@ -110,7 +110,8 @@ function runSingleTranslation(args: TranslateArgs): Effect.Effect<void, Translat
     const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model);
     const data = yield* fetchTranslationData(args.input, fileInfo, args.sourceLanguage, args.targetLanguage);
 
-    const sessionId = generateSessionId(data, args.model, args.chunkSize, args.surroundingContextLength);
+    const sessionId = generateSessionId(data);
+    const cacheId = generateCacheId(data, args.model, args.chunkSize, args.surroundingContextLength);
     yield* Effect.log(`Session ID: ${sessionId}`);
 
     const languageModel = makeLanguageModelLayer({
@@ -127,14 +128,14 @@ function runSingleTranslation(args: TranslateArgs): Effect.Effect<void, Translat
       concurrency: args.concurrency,
     };
 
-    const result = yield* translateChunked(data, params, sessionId)
+    const result = yield* translateChunked(data, params, cacheId)
       .pipe(Effect.provide(languageModel));
 
     yield* writeSrtFile(fileInfo.targetFilePath, result);
     yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
 
     const cache = yield* TranslationCache;
-    yield* cache.clear(sessionId);
+    yield* cache.clear(cacheId);
   });
 }
 

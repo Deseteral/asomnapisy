@@ -20,8 +20,8 @@ const CacheDataSchema = Schema.mutable(
 const JsonCacheData = Schema.parseJson(CacheDataSchema);
 type CacheData = Schema.Schema.Type<typeof CacheDataSchema>;
 
-function cacheFilePath(sessionId: string): string {
-  return path.join(cacheDir(), `${sessionId}.json`);
+function cacheFilePath(cacheId: string): string {
+  return path.join(cacheDir(), `${cacheId}.json`);
 }
 
 function cacheDir(): string {
@@ -34,21 +34,21 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
     const fs = yield* FileSystem.FileSystem;
     const semaphore = yield* Effect.makeSemaphore(1);
 
-    const load = (sessionId: string): Effect.Effect<Map<string, SrtSubtitle[]>> =>
+    const load = (cacheId: string): Effect.Effect<Map<string, SrtSubtitle[]>> =>
       semaphore.withPermits(1)(
         Effect.gen(function* () {
-          const filePath = cacheFilePath(sessionId);
+          const filePath = cacheFilePath(cacheId);
 
           const json = yield* fs.readFileString(filePath, "utf8").pipe(
             Effect.catchAll((error: PlatformError) =>
-              Effect.logWarning(`Failed to read cache file (${sessionId}): ${error.message}`)
+              Effect.logWarning(`Failed to read cache file (${cacheId}): ${error.message}`)
                 .pipe(Effect.as("{}")),
             ),
           );
 
           const decoded = yield* Schema.decodeUnknown(JsonCacheData)(json).pipe(
             Effect.catchAll((error) =>
-              Effect.logWarning(`Failed to parse cache file (${sessionId}): ${error.message}`)
+              Effect.logWarning(`Failed to parse cache file (${cacheId}): ${error.message}`)
                 .pipe(Effect.as<CacheData>({})),
             ),
           );
@@ -58,17 +58,17 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
       );
 
     const save = (
-      sessionId: string,
+      cacheId: string,
       chunkId: string,
       subtitles: SrtSubtitle[],
     ): Effect.Effect<void> =>
       semaphore.withPermits(1)(
         Effect.gen(function* () {
-          const filePath = cacheFilePath(sessionId);
+          const filePath = cacheFilePath(cacheId);
 
           yield* fs.makeDirectory(cacheDir(), { recursive: true }).pipe(
             Effect.catchAll((error: PlatformError) =>
-              Effect.logWarning(`Failed to create cache dir (${sessionId}): ${error.message}`),
+              Effect.logWarning(`Failed to create cache dir (${cacheId}): ${error.message}`),
             ),
           );
 
@@ -91,20 +91,20 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
               ),
             ),
             Effect.catchAll((error) =>
-              Effect.logWarning(`Failed to save cache file (${sessionId}): ${error.message}`),
+              Effect.logWarning(`Failed to save cache file (${cacheId}): ${error.message}`),
             ),
           );
         }),
       );
 
-    const clear = (sessionId: string): Effect.Effect<void> =>
+    const clear = (cacheId: string): Effect.Effect<void> =>
       semaphore.withPermits(1)(
         Effect.gen(function* () {
-          const filePath = cacheFilePath(sessionId);
+          const filePath = cacheFilePath(cacheId);
 
           yield* fs.remove(filePath, { force: true }).pipe(
             Effect.catchAll((error: PlatformError) =>
-              Effect.logWarning(`Failed to clear cache (${sessionId}): ${error.message}`),
+              Effect.logWarning(`Failed to clear cache (${cacheId}): ${error.message}`),
             ),
           );
         }),
