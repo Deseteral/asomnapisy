@@ -36,18 +36,16 @@ export function serializeSrt(data: SrtData): string {
 }
 
 export function readSrtFile(path: string): Effect.Effect<SrtData, PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const text = yield* fs.readFileString(path, "utf8");
-    return parseSrt(text);
-  });
+  return FileSystem.FileSystem.pipe(
+    Effect.flatMap((fs) => fs.readFileString(path, "utf8")),
+    Effect.map(parseSrt),
+  );
 }
 
 export function writeSrtFile(filePath: string, data: SrtData): Effect.Effect<void, PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString(filePath, serializeSrt(data));
-  });
+  return FileSystem.FileSystem.pipe(
+    Effect.flatMap((fs) => fs.writeFileString(filePath, serializeSrt(data))),
+  );
 }
 
 export function getFullText(subtitle: SrtSubtitle): string {

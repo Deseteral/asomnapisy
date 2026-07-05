@@ -18,12 +18,9 @@ const cli = Command.run(command, {
   version: "v1.0.0",
 });
 
-// TODO:
-// Cast needed: TypeScript's Exclude can't reduce CliApp.Environment (FileSystem | Path | Terminal)
-// against BunContext even though all members are provided.
-const program = cli(process.argv).pipe(
-  Effect.provide(Layer.mergeAll(BunContext.layer, FetchHttpClient.layer, TmdbClient.Default)),
-);
+const MainLayer = Layer.mergeAll(BunContext.layer, FetchHttpClient.layer, TmdbClient.Default);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(program as Effect.Effect<void, any>).pipe(BunRuntime.runMain);
+cli(process.argv).pipe(
+  Effect.provide(MainLayer),
+  BunRuntime.runMain,
+);

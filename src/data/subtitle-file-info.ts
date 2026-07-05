@@ -1,10 +1,12 @@
-import { Data, Effect, Match } from "effect";
+import { Data, Effect } from "effect";
 import * as path from "node:path";
 import { stringReplaceLast, slugify } from "../utils.ts";
 
-// TODO: Add support for vtt.
 export const SUPPORTED_SUBTITLE_FILE_TYPES = ["srt"] as const;
 export type SubtitleFileType = (typeof SUPPORTED_SUBTITLE_FILE_TYPES)[number];
+export function isSupportedSubtitle(ext: string): ext is SubtitleFileType {
+  return (SUPPORTED_SUBTITLE_FILE_TYPES as readonly string[]).includes(ext);
+}
 
 type BaseFileInfo = {
   type: SubtitleFileType;
@@ -25,26 +27,9 @@ export type EpisodeFileInfo = BaseFileInfo & {
 
 export type SubtitleFileInfo = MovieFileInfo | EpisodeFileInfo;
 
-export class UnsupportedSubtitleFileTypeError extends Data.TaggedError("UnsupportedSubtitleFileTypeError")<object> {}
-
-export class LanguageCodeMissingError extends Data.TaggedError("LanguageCodeMissingError")<object> {}
-
-export class TmdbIdMissingError extends Data.TaggedError("TmdbIdMissingError")<object> {}
-
-export class SeasonNumberMissingError extends Data.TaggedError("SeasonNumberMissingError")<{
-  filename: string;
+export class SubtitleFileParsingError extends Data.TaggedError("SubtitleFileParsingError")<{
+  message: string;
 }> {}
-
-export class EpisodeNumberMissingError extends Data.TaggedError("EpisodeNumberMissingError")<{
-  filename: string;
-}> {}
-
-export type SubtitleFilePathParsingError =
-  | UnsupportedSubtitleFileTypeError
-  | LanguageCodeMissingError
-  | TmdbIdMissingError
-  | SeasonNumberMissingError
-  | EpisodeNumberMissingError;
 
 const EPISODE_PATTERN = /[Ss](\d+)[Ee](\d+)/;
 const PARTIAL_SEASON_PATTERN = /[Ss](\d+)/;
@@ -54,58 +39,56 @@ export function parseFilePath(
   sourceLanguageCode: string,
   targetLanguageCode: string,
   model: string,
-): Effect.Effect<SubtitleFileInfo, SubtitleFilePathParsingError> {
-  return Effect.gen(function* () {
-    const filename = path.basename(filePath);
-    const dirname = path.dirname(filePath);
-    const extension = path.extname(filePath);
+): Effect.Effect<SubtitleFileInfo, SubtitleFileParsingError> {
+  const fail = (message: string): Effect.Effect<never, SubtitleFileParsingError> =>
+    Effect.fail(new SubtitleFileParsingError({ message }));
 
-    const type: SubtitleFileType = yield* Match.value(extension).pipe(
-      Match.when(".srt", () => Effect.succeed("srt" as const)),
-      Match.orElse(() => Effect.fail(new UnsupportedSubtitleFileTypeError())),
-    );
+  const filename = path.basename(filePath);
+  const dirname = path.dirname(filePath);
+  const type = path.extname(filePath).replace('.', '');
 
-    if (!filename.includes(`.${sourceLanguageCode}.`)) {
-      return yield* Effect.fail(new LanguageCodeMissingError());
-    }
+  if (!isSupportedSubtitle(type)) {
+    return fail(`Unsupported subtitle file type "${type}".`);
+  }
 
-    const tmdbId = filename.match(/tmdb-(\d+)/)?.[1];
-    if (!tmdbId) {
-      return yield* Effect.fail(new TmdbIdMissingError());
-    }
+  if (!filename.includes(`.${sourceLanguageCode}.`)) {
+    return fail(`Missing ".${sourceLanguageCode}." language code in filename.`);
+  }
 
-    const targetFileName = stringReplaceLast(
-      filename,
-      `.${sourceLanguageCode}.`,
-      `.${slugify(model)}.${targetLanguageCode}.`,
-    );
+  const tmdbId = filename.match(/tmdb-(\d+)/)?.[1];
+  if (!tmdbId) {
+    return fail('Missing "tmdb-<id>" tag in filename.');
+  }
 
-    const targetFilePath = path.join(dirname, targetFileName);
+  const targetFileName = stringReplaceLast(
+    filename,
+    `.${sourceLanguageCode}.`,
+    `.${slugify(model)}.${targetLanguageCode}.`,
+  );
 
-    const episodeMatch = filename.match(EPISODE_PATTERN);
-    if (episodeMatch?.[1] && episodeMatch?.[2]) {
-      const seasonNumber = parseInt(episodeMatch[1], 10);
-      const episodeNumber = parseInt(episodeMatch[2], 10);
-      return {
-        kind: "episode" as const,
-        type,
-        seriesTmdbId: tmdbId,
-        seasonNumber,
-        episodeNumber,
-        targetFilePath,
-      };
-    }
+  const targetFilePath = path.join(dirname, targetFileName);
 
-    // Detect partial episode patterns (e.g. S01 without E-number).
-    if (PARTIAL_SEASON_PATTERN.test(filename)) {
-      return yield* Effect.fail(new EpisodeNumberMissingError({ filename }));
-    }
-
-    return {
-      kind: "movie" as const,
+  const episodeMatch = filename.match(EPISODE_PATTERN);
+  if (episodeMatch?.[1] && episodeMatch?.[2]) {
+    return Effect.succeed({
+      kind: "episode",
       type,
-      tmdbId,
+      seriesTmdbId: tmdbId,
+      seasonNumber: parseInt(episodeMatch[1], 10),
+      episodeNumber: parseInt(episodeMatch[2], 10),
       targetFilePath,
-    };
+    });
+  }
+
+  // Detect partial episode patterns (e.g. S01 without E-number).
+  if (PARTIAL_SEASON_PATTERN.test(filename)) {
+    return fail(`Season without episode number in filename "${filename}".`);
+  }
+
+  return Effect.succeed({
+    kind: "movie",
+    type,
+    tmdbId,
+    targetFilePath,
   });
 }

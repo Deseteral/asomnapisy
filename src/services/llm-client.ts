@@ -1,10 +1,35 @@
-import { Config, Match, Redacted } from "effect";
+import { Config, Layer, Match, Redacted } from "effect";
 import { HttpClient, HttpClientRequest } from "@effect/platform";
-import { OpenAiClient } from "@effect/ai-openai";
+import type { LanguageModel } from "@effect/ai";
+import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
 import type { ConfigError } from "effect/ConfigError";
-import type { Layer } from "effect/Layer";
 
-type LlmClientLayer = Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient>;
+export const LLM_PROVIDERS = ["ollama", "lmstudio", "openrouter"] as const;
+export type LlmProvider = (typeof LLM_PROVIDERS)[number];
+
+export type LanguageModelOptions = {
+  provider: LlmProvider;
+  model: string;
+  reasoning: boolean;
+  sessionId?: string;
+};
+
+type LlmClientLayer = Layer.Layer<OpenAiClient.OpenAiClient, ConfigError, HttpClient.HttpClient>;
+
+export function makeLanguageModelLayer(
+  options: LanguageModelOptions,
+): Layer.Layer<LanguageModel.LanguageModel, ConfigError, HttpClient.HttpClient> {
+  const client = Match.value(options.provider).pipe(
+    Match.when("ollama", () => makeOllamaClient()),
+    Match.when("lmstudio", () => makeLmStudioClient()),
+    Match.when("openrouter", () => makeOpenRouterClient(options.sessionId)),
+    Match.exhaustive,
+  );
+
+  return OpenAiLanguageModel
+    .model(options.model, { reasoning: { effort: options.reasoning ? "minimal" : "none" } })
+    .pipe(Layer.provide(client));
+}
 
 function makeOllamaClient(): LlmClientLayer {
   return OpenAiClient.layerConfig({
@@ -39,20 +64,4 @@ function makeOpenRouterClient(sessionId?: string): LlmClientLayer {
       HttpClient.mapRequest(HttpClientRequest.setHeaders(headers)),
     ),
   });
-}
-
-export const LLM_PROVIDERS = [
-  "ollama",
-  "lmstudio",
-  "openrouter",
-] as const;
-export type LlmProvider = (typeof LLM_PROVIDERS)[number];
-
-export function makeOpenAiClientLayer(provider: LlmProvider, sessionId?: string): LlmClientLayer {
-  return Match.value(provider).pipe(
-    Match.when("ollama", () => makeOllamaClient()),
-    Match.when("lmstudio", () => makeLmStudioClient()),
-    Match.when("openrouter", () => makeOpenRouterClient(sessionId)),
-    Match.exhaustive,
-  );
 }

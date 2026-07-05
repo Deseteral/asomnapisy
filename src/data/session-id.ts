@@ -1,6 +1,6 @@
 import { Match } from "effect";
 import { slugify } from "../utils";
-import { formatAsEpisodeCode, type SubtitleTranslationData } from "./translation-mode.ts";
+import { formatAsEpisodeCode, type SubtitleTranslationData } from "./translation-data.ts";
 
 export function generateSessionId(data: SubtitleTranslationData): string {
   const mediaTitle = Match.value(data).pipe(

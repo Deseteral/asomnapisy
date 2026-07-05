@@ -2,7 +2,7 @@ import { AiError, LanguageModel, Prompt } from "@effect/ai";
 import { Array as Arr, Effect, Either, Match, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
-import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-mode.ts";
+import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-data.ts";
 
 class ChunkTranslationError extends Schema.TaggedError<ChunkTranslationError>()(
   "ChunkTranslationError",

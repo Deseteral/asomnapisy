@@ -1,18 +1,21 @@
-import { LanguageModel } from "@effect/ai";
-import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { Args, Command, Options } from "@effect/cli";
 import { FileSystem, HttpClient } from "@effect/platform";
 import type { PlatformError } from "@effect/platform/Error";
 import type { ConfigError } from "effect/ConfigError";
-import { Array as Arr, Effect, Layer, Match, Option } from "effect";
+import { Array as Arr, Effect, Match, Option } from "effect";
 import * as path from "node:path";
-import { readSrtFile, type SrtData, writeSrtFile } from "../data/srt.ts";
-import { parseFilePath, type SubtitleFileInfo, SUPPORTED_SUBTITLE_FILE_TYPES } from "../data/subtitle-file-info.ts";
-import type { SubtitleTranslationData } from "../data/translation-mode.ts";
-import { LLM_PROVIDERS, type LlmProvider, makeOpenAiClientLayer } from "../services/llm-client.ts";
-import { TmdbClient, type TmdbError } from "../services/tmdb-client.ts";
+import { readSrtFile, writeSrtFile } from "../data/srt.ts";
+import {
+  parseFilePath,
+  type SubtitleFileInfo,
+  type SubtitleFileParsingError,
+  SUPPORTED_SUBTITLE_FILE_TYPES,
+} from "../data/subtitle-file-info.ts";
+import type { SubtitleTranslationData } from "../data/translation-data.ts";
 import { generateSessionId } from "../data/session-id.ts";
-import { translateChunked, type TranslateChunkedParams } from "../translation-modes/chunked-translation-mode.ts";
+import { LLM_PROVIDERS, makeLanguageModelLayer, type LlmProvider } from "../services/llm-client.ts";
+import { TmdbClient, type TmdbError } from "../services/tmdb-client.ts";
+import { translateChunked } from "../translation/chunked-translation.ts";
 
 const input = Args.path({ name: "sourceSubtitles", exists: "yes" }).pipe(
   Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`),
@@ -53,6 +56,22 @@ const maxRetries = Options.integer("maxRetries").pipe(
   Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."),
 );
 
+type TranslateArgs = {
+  input: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  llmProvider: LlmProvider;
+  model: string;
+  chunkSize: number;
+  surroundingContextLength: number;
+  maxRetries: number;
+  concurrency: number;
+  reasoning: boolean;
+};
+
+type TranslateError = PlatformError | ConfigError | TmdbError | SubtitleFileParsingError;
+type TranslateEnv = FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient;
+
 export const translateCommand = Command.make(
   "translate",
   {
@@ -67,65 +86,45 @@ export const translateCommand = Command.make(
     concurrency,
     reasoning,
   },
-  (args) => {
-    const params: TranslateChunkedParams = {
-      chunkSize: args.chunkSize,
-      surroundingContextLength: args.surroundingContextLength,
-      maxRetries: args.maxRetries,
-      concurrency: args.concurrency,
-    };
-
-    return runTranslation(args, (data) => translateChunked(data, params));
-  },
+  (args) => runTranslation(args),
 ).pipe(
   Command.withDescription("Translate subtitles. Automatically detects media type. Accepts a single file or a directory for batch translation."),
 );
 
-type TranslationArgs = {
-  input: string;
-  sourceLanguage: string;
-  targetLanguage: string;
-  model: string;
-  llmProvider: LlmProvider;
-  reasoning: boolean;
-};
-
-function runTranslation<E>(
-  args: TranslationArgs,
-  translate: (data: SubtitleTranslationData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
-): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient> {
+function runTranslation(args: TranslateArgs): Effect.Effect<void, TranslateError, TranslateEnv> {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const stat = yield* fs.stat(args.input);
 
     yield* Match.value(stat.type).pipe(
-      Match.when("File", () => runSingleTranslation(args, translate)),
-      Match.when("Directory", () => runBatchTranslation(args, translate)),
+      Match.when("File", () => runSingleTranslation(args)),
+      Match.when("Directory", () => runBatchTranslation(args)),
       Match.orElse(() => Effect.void),
     );
   });
 }
 
-function runSingleTranslation<E>(
-  args: TranslationArgs,
-  translate: (data: SubtitleTranslationData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
-): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient> {
+function runSingleTranslation(args: TranslateArgs): Effect.Effect<void, TranslateError, TranslateEnv> {
   return Effect.gen(function* () {
-    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model)
-      .pipe(Effect.orDie);
-
-    const data = yield* fetchData(
-      args.input,
-      fileInfo,
-      args.sourceLanguage,
-      args.targetLanguage,
-    ).pipe(Effect.orDie);
+    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model);
+    const data = yield* fetchTranslationData(args.input, fileInfo, args.sourceLanguage, args.targetLanguage);
 
     const sessionId = generateSessionId(data);
     yield* Effect.log(`Session ID: ${sessionId}`);
 
-    const result = yield* translate(data)
-      .pipe(Effect.provide(makeLlmClientLayer({ ...args, sessionId })));
+    const languageModel = makeLanguageModelLayer({
+      provider: args.llmProvider,
+      model: args.model,
+      reasoning: args.reasoning,
+      sessionId,
+    });
+
+    const result = yield* translateChunked(data, {
+      chunkSize: args.chunkSize,
+      surroundingContextLength: args.surroundingContextLength,
+      maxRetries: args.maxRetries,
+      concurrency: args.concurrency,
+    }).pipe(Effect.provide(languageModel));
 
     yield* writeSrtFile(fileInfo.targetFilePath, result);
     yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);
@@ -137,64 +136,79 @@ type BatchFileEntry = {
   fileInfo: SubtitleFileInfo;
 };
 
-function runBatchTranslation<E>(
-  args: TranslationArgs,
-  translate: (data: SubtitleTranslationData) => Effect.Effect<SrtData, E, LanguageModel.LanguageModel>,
-): Effect.Effect<void, E | PlatformError | ConfigError | TmdbError, FileSystem.FileSystem | HttpClient.HttpClient | TmdbClient> {
+type BatchStatus = "translated" | "skipped" | "failed";
+
+function runBatchTranslation(args: TranslateArgs): Effect.Effect<void, PlatformError, TranslateEnv> {
   return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const entries = (yield* discoverFilesToBatchProcess(args.input, args.sourceLanguage, args.targetLanguage, args.model))
-      .toSorted((a,b) => a.filePath.localeCompare(b.filePath));
+    const entries = (yield* discoverFilesToBatchProcess(args))
+      .toSorted((a, b) => a.filePath.localeCompare(b.filePath));
 
     if (entries.length === 0) {
-      yield* Effect.log(`No matching subtitle files found in ${args.input}.`);
-      return;
+      return yield* Effect.log(`No matching subtitle files found in ${args.input}.`);
     }
 
     yield* Effect.log(`Found ${entries.length} subtitle files in ${args.input}.`);
 
-    let completedCount = 0;
-    let skippedCount = 0;
-    const failed: BatchFileEntry[] = [];
+    const statuses = yield* Effect.forEach(entries, (entry) => translateBatchEntry(args, entry));
+    const results = Arr.zip(entries, statuses);
 
-    for (const entry of entries) {
-      const targetExists = yield* fs.exists(entry.fileInfo.targetFilePath);
-      if (targetExists) {
-        yield* Effect.log(`${entry.filePath} - skipped (target exists).`);
-        skippedCount++;
-        continue;
-      }
+    const countOf = (status: BatchStatus): number => statuses.filter((s) => s === status).length;
+    const failed = results.filter(([, status]) => status === "failed");
 
-      yield* Effect.log(`Translating ${entry.filePath}.`);
-
-      const translationArgs: TranslationArgs = { ...args, input: entry.filePath };
-      const translationWasSuccessful = yield* runSingleTranslation(translationArgs, translate).pipe(
-        Effect.map(() => true),
-        Effect.catchAll((error) =>
-          Effect.logError(`  ${entry.filePath} - failed: ${String(error)}.`)
-            .pipe(Effect.as(false)),
-        ),
-      );
-
-      if (translationWasSuccessful) {
-        completedCount++;
-      } else {
-        failed.push(entry);
-      }
-    }
-
-    yield* Effect.log(`\nBatch complete: ${completedCount} translated, ${skippedCount} skipped, ${failed.length} failed.`);
+    yield* Effect.log(`\nBatch complete: ${countOf("translated")} translated, ${countOf("skipped")} skipped, ${failed.length} failed.`);
 
     if (failed.length > 0) {
       yield* Effect.log("Failed:");
-      for (const failedEntry of failed) {
-        yield* Effect.log(`  ${failedEntry.filePath}`);
-      }
+      yield* Effect.forEach(failed, ([entry]) => Effect.log(`  ${entry.filePath}`));
     }
   });
 }
 
-function fetchData(
+function translateBatchEntry(args: TranslateArgs, entry: BatchFileEntry): Effect.Effect<BatchStatus, PlatformError, TranslateEnv> {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+
+    if (yield* fs.exists(entry.fileInfo.targetFilePath)) {
+      yield* Effect.log(`${entry.filePath} - skipped (target exists).`);
+      return "skipped";
+    }
+
+    yield* Effect.log(`Translating ${entry.filePath}.`);
+
+    return yield* runSingleTranslation({ ...args, input: entry.filePath }).pipe(
+      Effect.as<BatchStatus>("translated"),
+      Effect.catchAll((error) =>
+        Effect.logError(`  ${entry.filePath} - failed: ${String(error)}.`)
+          .pipe(Effect.as<BatchStatus>("failed")),
+      ),
+    );
+  });
+}
+
+function discoverFilesToBatchProcess(args: TranslateArgs): Effect.Effect<BatchFileEntry[], PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const filenames = yield* fs.readDirectory(args.input);
+
+    // TODO: This only looks for .srt files, but it should use SUPPORTED_SUBTITLE_FILE_TYPES instead.
+    const candidates = filenames.filter((filename) => filename.endsWith(`.${args.sourceLanguage}.srt`));
+
+    const parsed = yield* Effect.forEach(candidates, (filename) => {
+      const filePath = path.join(args.input, filename);
+      return parseFilePath(filePath, args.sourceLanguage, args.targetLanguage, args.model).pipe(
+        Effect.map((fileInfo): Option.Option<BatchFileEntry> => Option.some({ filePath, fileInfo })),
+        Effect.catchAll((error) =>
+          Effect.logWarning(`Skipping ${filename}: ${error.message}`)
+            .pipe(Effect.as(Option.none<BatchFileEntry>())),
+        ),
+      );
+    });
+
+    return Arr.getSomes(parsed);
+  });
+}
+
+function fetchTranslationData(
   inputPath: string,
   fileInfo: SubtitleFileInfo,
   sourceLanguage: string,
@@ -244,48 +258,4 @@ function fetchData(
       Match.exhaustive,
     );
   });
-}
-
-function discoverFilesToBatchProcess(
-  dirPath: string,
-  sourceLanguage: string,
-  targetLanguage: string,
-  model: string,
-): Effect.Effect<BatchFileEntry[], PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const entries = yield* fs.readDirectory(dirPath);
-
-    const suffix = `.${sourceLanguage}.srt`;
-    const candidateFiles = entries.filter((entry) => entry.endsWith(suffix));
-
-    const parsed = yield* Effect.forEach(candidateFiles, (filename) => {
-      const filePath = path.join(dirPath, filename);
-      return parseFilePath(filePath, sourceLanguage, targetLanguage, model).pipe(
-        Effect.map((fileInfo): Option.Option<BatchFileEntry> => Option.some({ filePath, fileInfo })),
-        Effect.catchAll((error) =>
-          Effect.logWarning(`Skipping ${filename}: ${error._tag}.`)
-            .pipe(Effect.as(Option.none<BatchFileEntry>())),
-        ),
-      );
-    });
-
-    return Arr.getSomes(parsed);
-  });
-}
-
-function makeLlmClientLayer(args: {
-  llmProvider: LlmProvider;
-  model: string;
-  reasoning: boolean;
-  sessionId?: string
-}): Layer.Layer<
-  LanguageModel.LanguageModel,
-  ConfigError,
-  HttpClient.HttpClient
-> {
-  const model = OpenAiLanguageModel.model(args.model, { reasoning: { effort: args.reasoning ? "minimal" : "none" } }).pipe(
-    Layer.provide(makeOpenAiClientLayer(args.llmProvider, args.sessionId)),
-  );
-  return Layer.mergeAll(model);
 }
