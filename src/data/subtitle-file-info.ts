@@ -2,14 +2,15 @@ import { Data, Effect } from "effect";
 import * as path from "node:path";
 import { stringReplaceLast } from "../utils.ts";
 
-export const SUPPORTED_SUBTITLE_FILE_TYPES = ["srt"] as const;
-export type SubtitleFileType = (typeof SUPPORTED_SUBTITLE_FILE_TYPES)[number];
-export function isSupportedSubtitle(ext: string): ext is SubtitleFileType {
-  return (SUPPORTED_SUBTITLE_FILE_TYPES as readonly string[]).includes(ext);
+export const SUPPORTED_SUBTITLE_INPUT_FILE_TYPES = ["srt"] as const;
+export type SubtitleInputFileType = (typeof SUPPORTED_SUBTITLE_INPUT_FILE_TYPES)[number];
+
+export function isSupportedSubtitleFormat(fileExtension: string): fileExtension is SubtitleInputFileType {
+  return (SUPPORTED_SUBTITLE_INPUT_FILE_TYPES as readonly string[]).includes(fileExtension);
 }
 
 type BaseFileInfo = {
-  type: SubtitleFileType;
+  type: SubtitleInputFileType;
   targetFilePath: string;
 };
 
@@ -44,9 +45,9 @@ export function parseFilePath(
 
   const filename = path.basename(filePath);
   const dirname = path.dirname(filePath);
-  const type = path.extname(filePath).replace('.', '');
+  const type = path.extname(filePath).replace(".", "");
 
-  if (!isSupportedSubtitle(type)) {
+  if (!isSupportedSubtitleFormat(type)) {
     return fail(`Unsupported subtitle file type "${type}".`);
   }
 
@@ -56,7 +57,7 @@ export function parseFilePath(
 
   const tmdbId = filename.match(/tmdb-(\d+)/)?.[1];
   if (!tmdbId) {
-    return fail('Missing "tmdb-<id>" tag in filename.');
+    return fail("Missing \"tmdb-<id>\" tag in filename.");
   }
 
   const targetFileName = stringReplaceLast(

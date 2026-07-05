@@ -9,7 +9,7 @@ import {
   parseFilePath,
   type SubtitleFileInfo,
   type SubtitleFileParsingError,
-  SUPPORTED_SUBTITLE_FILE_TYPES,
+  SUPPORTED_SUBTITLE_INPUT_FILE_TYPES,
 } from "../data/subtitle-file-info.ts";
 import type { SubtitleTranslationData } from "../data/translation-data.ts";
 import { generateCacheId, generateSessionId } from "../data/session-id.ts";
@@ -19,7 +19,7 @@ import { TranslationCache } from "../services/translation-cache.ts";
 import { translateChunked, type TranslateChunkedParams } from "../translation/chunked-translation.ts";
 
 const input = Args.path({ name: "sourceSubtitles", exists: "yes" }).pipe(
-  Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_FILE_TYPES.join(", ")}.`),
+  Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_INPUT_FILE_TYPES.join(", ")}.`),
 );
 const sourceLanguage = Options.text("sourceLanguage").pipe(
   Options.withDefault("en"),
@@ -268,7 +268,7 @@ function fetchTranslationData(
 }
 
 function isSupportedSourceFile(filename: string, sourceLanguage: string): boolean {
-  return SUPPORTED_SUBTITLE_FILE_TYPES
+  return SUPPORTED_SUBTITLE_INPUT_FILE_TYPES
     .map((type) => `.${sourceLanguage}.${type}`)
     .some((suffix) => filename.endsWith(suffix));
 }
