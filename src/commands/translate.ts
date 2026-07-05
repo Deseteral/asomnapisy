@@ -13,7 +13,7 @@ import {
 } from "../data/subtitle-file-info.ts";
 import type { SubtitleTranslationData } from "../data/translation-data.ts";
 import { generateCacheId, generateSessionId } from "../data/session-id.ts";
-import { LLM_PROVIDERS, makeLanguageModelLayer, type LlmProvider } from "../services/llm-client.ts";
+import { LLM_PROVIDERS, type LlmProvider, makeLanguageModelLayer } from "../services/llm-client.ts";
 import { TmdbClient, type TmdbError } from "../services/tmdb-client.ts";
 import { TranslationCache } from "../services/translation-cache.ts";
 import { translateChunked, type TranslateChunkedParams } from "../translation/chunked-translation.ts";
@@ -198,8 +198,7 @@ function discoverFilesToBatchProcess(args: TranslateArgs): Effect.Effect<BatchFi
     const fs = yield* FileSystem.FileSystem;
     const filenames = yield* fs.readDirectory(args.input);
 
-    // TODO: This only looks for .srt files, but it should use SUPPORTED_SUBTITLE_FILE_TYPES instead.
-    const candidates = filenames.filter((filename) => filename.endsWith(`.${args.sourceLanguage}.srt`));
+    const candidates = filenames.filter((filename) => isSupportedSourceFile(filename, args.sourceLanguage));
 
     const parsed = yield* Effect.forEach(candidates, (filename) => {
       const filePath = path.join(args.input, filename);
@@ -266,4 +265,10 @@ function fetchTranslationData(
       Match.exhaustive,
     );
   });
+}
+
+function isSupportedSourceFile(filename: string, sourceLanguage: string): boolean {
+  return SUPPORTED_SUBTITLE_FILE_TYPES
+    .map((type) => `.${sourceLanguage}.${type}`)
+    .some((suffix) => filename.endsWith(suffix));
 }
