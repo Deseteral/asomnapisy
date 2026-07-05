@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "build": "bun run ./scripts/build.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
