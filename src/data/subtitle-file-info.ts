@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect";
 import * as path from "node:path";
-import { stringReplaceLast, slugify } from "../utils.ts";
+import { stringReplaceLast } from "../utils.ts";
 
 export const SUPPORTED_SUBTITLE_FILE_TYPES = ["srt"] as const;
 export type SubtitleFileType = (typeof SUPPORTED_SUBTITLE_FILE_TYPES)[number];
@@ -38,7 +38,6 @@ export function parseFilePath(
   filePath: string,
   sourceLanguageCode: string,
   targetLanguageCode: string,
-  model: string,
 ): Effect.Effect<SubtitleFileInfo, SubtitleFileParsingError> {
   const fail = (message: string): Effect.Effect<never, SubtitleFileParsingError> =>
     Effect.fail(new SubtitleFileParsingError({ message }));

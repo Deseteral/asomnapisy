@@ -107,7 +107,7 @@ function runTranslation(args: TranslateArgs): Effect.Effect<void, TranslateError
 
 function runSingleTranslation(args: TranslateArgs): Effect.Effect<void, TranslateError, TranslateEnv> {
   return Effect.gen(function* () {
-    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage, args.model);
+    const fileInfo = yield* parseFilePath(args.input, args.sourceLanguage, args.targetLanguage);
     const data = yield* fetchTranslationData(args.input, fileInfo, args.sourceLanguage, args.targetLanguage);
 
     const sessionId = generateSessionId(data);
@@ -203,7 +203,7 @@ function discoverFilesToBatchProcess(args: TranslateArgs): Effect.Effect<BatchFi
 
     const parsed = yield* Effect.forEach(candidates, (filename) => {
       const filePath = path.join(args.input, filename);
-      return parseFilePath(filePath, args.sourceLanguage, args.targetLanguage, args.model).pipe(
+      return parseFilePath(filePath, args.sourceLanguage, args.targetLanguage).pipe(
         Effect.map((fileInfo): Option.Option<BatchFileEntry> => Option.some({ filePath, fileInfo })),
         Effect.catchAll((error) =>
           Effect.logWarning(`Skipping ${filename}: ${error.message}`)
