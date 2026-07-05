@@ -63,7 +63,7 @@ export function parseFilePath(
   const targetFileName = stringReplaceLast(
     filename,
     `.${sourceLanguageCode}.`,
-    `.${slugify(model)}.${targetLanguageCode}.`,
+    `.${targetLanguageCode}.`,
   );
 
   const targetFilePath = path.join(dirname, targetFileName);
