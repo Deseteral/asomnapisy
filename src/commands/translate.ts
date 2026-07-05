@@ -4,7 +4,7 @@ import type { PlatformError } from "@effect/platform/Error";
 import type { ConfigError } from "effect/ConfigError";
 import { Array as Arr, Effect, Match, Option } from "effect";
 import * as path from "node:path";
-import { readSrtFile, writeSrtFile } from "../data/srt.ts";
+import { injectCommentIntoSrtData, readSrtFile, writeSrtFile } from "../data/srt.ts";
 import {
   parseFilePath,
   type SubtitleFileInfo,
@@ -17,6 +17,7 @@ import { LLM_PROVIDERS, type LlmProvider, makeLanguageModelLayer } from "../serv
 import { TmdbClient, type TmdbError } from "../services/tmdb-client.ts";
 import { TranslationCache } from "../services/translation-cache.ts";
 import { translateChunked, type TranslateChunkedParams } from "../translation/chunked-translation.ts";
+import packageJson from "../../package.json";
 
 const input = Args.path({ name: "sourceSubtitles", exists: "yes" }).pipe(
   Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_INPUT_FILE_TYPES.join(", ")}.`),
@@ -128,8 +129,17 @@ function runSingleTranslation(args: TranslateArgs): Effect.Effect<void, Translat
       concurrency: args.concurrency,
     };
 
-    const result = yield* translateChunked(data, params, cacheId)
-      .pipe(Effect.provide(languageModel));
+    const translationInfoComment = [
+      `Translated by asomnapisy v${packageJson.version}`,
+      "https://github.com/Deseteral/asomnapisy",
+      `model: ${args.model}`,
+      `session ID: ${sessionId}`,
+    ].join("\n");
+
+    const result = yield* translateChunked(data, params, cacheId).pipe(
+      Effect.map((data) => injectCommentIntoSrtData(translationInfoComment, data)),
+      Effect.provide(languageModel),
+    );
 
     yield* writeSrtFile(fileInfo.targetFilePath, result);
     yield* Effect.log(`Saved translated subtitles to ${fileInfo.targetFilePath}`);

@@ -52,3 +52,14 @@ export function getFullText(subtitle: SrtSubtitle): string {
   return subtitle.content.join("\n");
 }
 
+export function injectCommentIntoSrtData(comment: string, data: SrtData): SrtData {
+  const commentSubtitle: SrtSubtitle = {
+    order: '0',
+    timestamp: '00:00:00,000 --> 00:00:00,000',
+    content: [comment],
+  };
+  return {
+    ...data,
+    subtitles: [commentSubtitle, ...data.subtitles],
+  }
+}
