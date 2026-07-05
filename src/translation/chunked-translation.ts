@@ -61,7 +61,7 @@ export function translateChunked(
     const logProgress = (chunk: Chunk): Effect.Effect<void> =>
       Ref.updateAndGet(completedCount, (n) => n + 1).pipe(
         Effect.flatMap((completed) =>
-          Effect.logInfo(`Translated chunk ${chunk.id} (${completed}/${chunks.length})`),
+          Effect.logInfo(`Translated chunk id: ${chunk.id} (${completed}/${chunks.length})`),
         ),
       );
 
@@ -93,7 +93,7 @@ function makeChunks(subtitles: SrtSubtitle[], params: TranslateChunkedParams): C
     const end = start + chunk.length;
 
     return {
-      id: `chunk-${index}`,
+      id: `chunk-${index + 1}`,
       subtitles: chunk,
       contextBefore: subtitles.slice(Math.max(start - params.surroundingContextLength, 0), start),
       contextAfter: subtitles.slice(end, end + params.surroundingContextLength),
