@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Dependencies live in the snapshot. Never reinstall them on wake.
+for tool in bun node ffmpeg ffprobe zip; do
+  command -v "$tool" >/dev/null || { echo "Missing ${tool}; rerun .agents/setup." >&2; exit 1; }
+done
+if [[ ! -d node_modules ]]; then
+  echo "Missing dependencies; rerun .agents/setup." >&2
+  exit 1
+fi
+echo "Orb toolchain and dependencies are ready."

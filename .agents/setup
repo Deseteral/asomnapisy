@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+SECONDS=0
+echo "Checking system prerequisites..."
+packages=()
+command -v curl >/dev/null || packages+=(curl)
+command -v unzip >/dev/null || packages+=(unzip)
+command -v zip >/dev/null || packages+=(zip)
+if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+  packages+=(ffmpeg)
+fi
+if ((${#packages[@]})); then
+  sudo apt-get update
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+fi
+echo "System prerequisites ready (${SECONDS}s)."
+
+# Keep the runtime stable across base-template updates. /usr/local/bin is also
+# available to agents in subsequent non-interactive login shells.
+bun_version=1.4.4
+if ! command -v bun >/dev/null || [[ "$(bun --version)" != "$bun_version" ]]; then
+  echo "Installing Bun ${bun_version}..."
+  curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash -s -- "bun-v${bun_version}"
+fi
+echo "Bun $(bun --version) ready (${SECONDS}s)."
+
+echo "Installing locked dependencies..."
+bun install --frozen-lockfile
+echo "Orb setup finished (${SECONDS}s)."
