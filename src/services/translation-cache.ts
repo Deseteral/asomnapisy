@@ -1,6 +1,5 @@
-import { Effect, Schema } from "effect";
-import { FileSystem } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
+import { Context, Effect, FileSystem, Layer, Schema, Semaphore } from "effect";
+import type { PlatformError } from "effect/PlatformError";
 import type { SrtSubtitle } from "../data/srt.ts";
 import { BunFileSystem } from "@effect/platform-bun";
 import * as os from "node:os";
@@ -11,13 +10,11 @@ const CachedSubtitle = Schema.Struct({
   timestamp: Schema.String,
   content: Schema.mutable(Schema.Array(Schema.String)),
 });
-const CacheDataSchema = Schema.mutable(
-  Schema.Record({
-    key: Schema.String,
-    value: Schema.mutable(Schema.Array(CachedSubtitle)),
-  }),
+const CacheDataSchema = Schema.Record(
+  Schema.String,
+  Schema.mutableKey(Schema.mutable(Schema.Array(CachedSubtitle))),
 );
-const JsonCacheData = Schema.parseJson(CacheDataSchema);
+const JsonCacheData = Schema.fromJsonString(CacheDataSchema);
 type CacheData = Schema.Schema.Type<typeof CacheDataSchema>;
 
 function cacheFilePath(cacheId: string): string {
@@ -28,11 +25,10 @@ function cacheDir(): string {
   return path.join(os.tmpdir(), "asomnapisy");
 }
 
-export class TranslationCache extends Effect.Service<TranslationCache>()("TranslationCache", {
-  dependencies: [BunFileSystem.layer],
-  effect: Effect.gen(function* () {
+export class TranslationCache extends Context.Service<TranslationCache>()("TranslationCache", {
+  make: Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const semaphore = yield* Effect.makeSemaphore(1);
+    const semaphore = yield* Semaphore.make(1);
 
     const load = (cacheId: string): Effect.Effect<Map<string, SrtSubtitle[]>> =>
       semaphore.withPermits(1)(
@@ -40,14 +36,14 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
           const filePath = cacheFilePath(cacheId);
 
           const json = yield* fs.readFileString(filePath, "utf8").pipe(
-            Effect.catchAll((error: PlatformError) =>
+            Effect.catch((error: PlatformError) =>
               Effect.logWarning(`Failed to read cache file (${cacheId}): ${error.message}`)
                 .pipe(Effect.as("{}")),
             ),
           );
 
-          const decoded = yield* Schema.decodeUnknown(JsonCacheData)(json).pipe(
-            Effect.catchAll((error) =>
+          const decoded = yield* Schema.decodeUnknownEffect(JsonCacheData)(json).pipe(
+            Effect.catch((error) =>
               Effect.logWarning(`Failed to parse cache file (${cacheId}): ${error.message}`)
                 .pipe(Effect.as<CacheData>({})),
             ),
@@ -67,30 +63,30 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
           const filePath = cacheFilePath(cacheId);
 
           yield* fs.makeDirectory(cacheDir(), { recursive: true }).pipe(
-            Effect.catchAll((error: PlatformError) =>
+            Effect.catch((error: PlatformError) =>
               Effect.logWarning(`Failed to create cache dir (${cacheId}): ${error.message}`),
             ),
           );
 
           const json = yield* fs.readFileString(filePath, "utf8").pipe(
-            Effect.catchAll(() => Effect.succeed("{}")),
+            Effect.catch(() => Effect.succeed("{}")),
           );
 
-          const existing = yield* Schema.decodeUnknown(JsonCacheData)(json).pipe(
-            Effect.catchAll(() => Effect.succeed<CacheData>({})),
+          const existing = yield* Schema.decodeUnknownEffect(JsonCacheData)(json).pipe(
+            Effect.catch(() => Effect.succeed<CacheData>({})),
           );
 
           existing[chunkId] = subtitles;
 
           const tmpPath = `${filePath}.tmp`;
-          yield* Schema.encode(JsonCacheData)(existing).pipe(
+          yield* Schema.encodeEffect(JsonCacheData)(existing).pipe(
             Effect.flatMap((data) =>
               fs.writeFileString(tmpPath, data).pipe(
-                Effect.zipRight(fs.rename(tmpPath, filePath)),
+                Effect.andThen(fs.rename(tmpPath, filePath)),
                 Effect.uninterruptible,
               ),
             ),
-            Effect.catchAll((error) =>
+            Effect.catch((error) =>
               Effect.logWarning(`Failed to save cache file (${cacheId}): ${error.message}`),
             ),
           );
@@ -103,7 +99,7 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
           const filePath = cacheFilePath(cacheId);
 
           yield* fs.remove(filePath, { force: true }).pipe(
-            Effect.catchAll((error: PlatformError) =>
+            Effect.catch((error: PlatformError) =>
               Effect.logWarning(`Failed to clear cache (${cacheId}): ${error.message}`),
             ),
           );
@@ -114,7 +110,7 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
       semaphore.withPermits(1)(
         Effect.gen(function* () {
           yield* fs.remove(cacheDir(), { recursive: true, force: true }).pipe(
-            Effect.catchAll((error: PlatformError) =>
+            Effect.catch((error: PlatformError) =>
               Effect.logWarning(`Failed to clear cache directory: ${error.message}`),
             ),
           );
@@ -123,4 +119,6 @@ export class TranslationCache extends Effect.Service<TranslationCache>()("Transl
 
     return { load, save, clear, clearAll };
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make).pipe(Layer.provide(BunFileSystem.layer));
+}

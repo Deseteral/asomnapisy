@@ -1,5 +1,5 @@
-import { Config, Data, Effect, Redacted, Schema } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "@effect/platform";
+import { Config, Context, Data, Effect, Layer, Redacted, Schema } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 export type MovieDetails = {
   title: string;
@@ -41,16 +41,16 @@ const TmdbEpisodeResponse = Schema.Struct({
   episode_number: Schema.Number,
 });
 
-export class TmdbClient extends Effect.Service<TmdbClient>()("TmdbClient", {
-  effect: Effect.gen(function* () {
-    const token = yield* Config.redacted("TMDB_ACCESS_TOKEN").pipe(
+export class TmdbClient extends Context.Service<TmdbClient>()("TmdbClient", {
+  make: Effect.gen(function* () {
+    const token = yield* Config.Redacted("TMDB_ACCESS_TOKEN").pipe(
       Effect.mapError(() => new TmdbError({ message: "TMDB_ACCESS_TOKEN environment variable is not set." })),
     );
     const httpClient = yield* HttpClient.HttpClient;
 
     const fetchJson = <A, I>(
       path: string,
-      schema: Schema.Schema<A, I>,
+      schema: Schema.Codec<A, I>,
       errorMessage: string,
     ): Effect.Effect<A, TmdbError> => {
       const request = HttpClientRequest.get(`https://api.themoviedb.org/3${path}`).pipe(
@@ -100,5 +100,6 @@ export class TmdbClient extends Effect.Service<TmdbClient>()("TmdbClient", {
 
     return { getMovieDetails, getEpisodeDetails };
   }),
-  dependencies: [FetchHttpClient.layer],
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make).pipe(Layer.provide(FetchHttpClient.layer));
+}

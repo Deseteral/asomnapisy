@@ -1,8 +1,8 @@
-import { Args, Command, Options } from "@effect/cli";
-import { FileSystem, HttpClient } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
-import type { ConfigError } from "effect/ConfigError";
-import { Array as Arr, Effect, Match, Option } from "effect";
+import { Argument, Command, Flag } from "effect/cli";
+import { HttpClient } from "effect/http";
+import type { PlatformError } from "effect/PlatformError";
+import type { ConfigError } from "effect/Config";
+import { Array as Arr, Effect, FileSystem, Match, Option } from "effect";
 import * as path from "node:path";
 import { injectCommentIntoSrtData, readSrtFile, writeSrtFile } from "../data/srt.ts";
 import {
@@ -19,43 +19,43 @@ import { TranslationCache } from "../services/translation-cache.ts";
 import { translateChunked, type TranslateChunkedParams } from "../translation/chunked-translation.ts";
 import packageJson from "../../package.json";
 
-const input = Args.path({ name: "sourceSubtitles", exists: "yes" }).pipe(
-  Args.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_INPUT_FILE_TYPES.join(", ")}.`),
+const input = Argument.Path("sourceSubtitles", { mustExist: true }).pipe(
+  Argument.withDescription(`The path of subtitle file or directory to translate. Supported file types: ${SUPPORTED_SUBTITLE_INPUT_FILE_TYPES.join(", ")}.`),
 );
-const sourceLanguage = Options.text("sourceLanguage").pipe(
-  Options.withDefault("en"),
-  Options.withDescription("Language code of source subtitles (e.g. en, fr, de)."),
+const sourceLanguage = Flag.String("sourceLanguage").pipe(
+  Flag.withDefault("en"),
+  Flag.withDescription("Language code of source subtitles (e.g. en, fr, de)."),
 );
-const targetLanguage = Options.text("targetLanguage").pipe(
-  Options.withDescription("Language code to translate the subtitles to (e.g. pl, es, ja)."),
+const targetLanguage = Flag.String("targetLanguage").pipe(
+  Flag.withDescription("Language code to translate the subtitles to (e.g. pl, es, ja)."),
 );
-const llmProvider = Options.choice("llmProvider", LLM_PROVIDERS).pipe(
-  Options.withDescription("LLM provider service."),
+const llmProvider = Flag.Literals("llmProvider", LLM_PROVIDERS).pipe(
+  Flag.withDescription("LLM provider service."),
 );
-const model = Options.text("model").pipe(
-  Options.withDescription("LLM model identifier."),
-);
-
-const surroundingContextLength = Options.integer("surroundingContextLength").pipe(
-  Options.withDefault(5),
-  Options.withDescription("Amount of lines before and after translated ones in context."),
-);
-const concurrency = Options.integer("concurrency").pipe(
-  Options.withDefault(1),
-  Options.withDescription("Number of subtitles to translate in parallel."),
-);
-const reasoning = Options.boolean("reasoning").pipe(
-  Options.withDefault(false),
-  Options.withDescription("Enable LLM reasoning."),
+const model = Flag.String("model").pipe(
+  Flag.withDescription("LLM model identifier."),
 );
 
-const chunkSize = Options.integer("chunkSize").pipe(
-  Options.withDefault(30),
-  Options.withDescription("The amount of lines in a single translation chunk."),
+const surroundingContextLength = Flag.Int("surroundingContextLength").pipe(
+  Flag.withDefault(5),
+  Flag.withDescription("Amount of lines before and after translated ones in context."),
 );
-const maxRetries = Options.integer("maxRetries").pipe(
-  Options.withDefault(3),
-  Options.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."),
+const concurrency = Flag.Int("concurrency").pipe(
+  Flag.withDefault(1),
+  Flag.withDescription("Number of subtitles to translate in parallel."),
+);
+const reasoning = Flag.Boolean("reasoning").pipe(
+  Flag.withDefault(false),
+  Flag.withDescription("Enable LLM reasoning."),
+);
+
+const chunkSize = Flag.Int("chunkSize").pipe(
+  Flag.withDefault(30),
+  Flag.withDescription("The amount of lines in a single translation chunk."),
+);
+const maxRetries = Flag.Int("maxRetries").pipe(
+  Flag.withDefault(3),
+  Flag.withDescription("The amount of retries for translating a chunk. Retry count grows when using less capable LLM models."),
 );
 
 type TranslateArgs = {
@@ -195,7 +195,7 @@ function translateBatchEntry(args: TranslateArgs, entry: BatchFileEntry): Effect
 
     return yield* runSingleTranslation({ ...args, input: entry.filePath }).pipe(
       Effect.as<BatchStatus>("translated"),
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         Effect.logError(`  ${entry.filePath} - failed: ${String(error)}.`)
           .pipe(Effect.as<BatchStatus>("failed")),
       ),
@@ -214,7 +214,7 @@ function discoverFilesToBatchProcess(args: TranslateArgs): Effect.Effect<BatchFi
       const filePath = path.join(args.input, filename);
       return parseFilePath(filePath, args.sourceLanguage, args.targetLanguage).pipe(
         Effect.map((fileInfo): Option.Option<BatchFileEntry> => Option.some({ filePath, fileInfo })),
-        Effect.catchAll((error) =>
+        Effect.catch((error) =>
           Effect.logWarning(`Skipping ${filename}: ${error.message}`)
             .pipe(Effect.as(Option.none<BatchFileEntry>())),
         ),

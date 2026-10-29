@@ -1,11 +1,11 @@
-import { Args, Command, Prompt } from "@effect/cli";
-import { Command as ShellCommand, CommandExecutor, Terminal } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
-import { Data, Effect } from "effect";
+import { Argument, Command, Prompt } from "effect/cli";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import type { PlatformError } from "effect/PlatformError";
+import { Data, Effect, Terminal } from "effect";
 import * as path from "node:path";
 
-const input = Args.file({ name: "videoFile", exists: "yes" }).pipe(
-  Args.withDescription("Video file with source subtitles."),
+const input = Argument.File("videoFile", { mustExist: true }).pipe(
+  Argument.withDescription("Video file with source subtitles."),
 );
 
 class InvalidLanguageCodeError extends Data.TaggedError("InvalidLanguageCodeError")<{
@@ -16,8 +16,8 @@ export const extractCommand = Command.make("extract", { input }, (args) => {
   return Effect.gen(function* () {
     yield* printTracks(args.input);
 
-    const track = (yield* Prompt.text({ message: "Enter track number to extract:" })).trim();
-    const language = (yield* Prompt.text({ message: "Enter two-letter language code (e.g. pl, en, de):" })).trim();
+    const track = (yield* Prompt.String({ message: "Enter track number to extract:" })).trim();
+    const language = (yield* Prompt.String({ message: "Enter two-letter language code (e.g. pl, en, de):" })).trim();
 
     if (language.length !== 2) {
       return yield* new InvalidLanguageCodeError({ message: `Invalid language code: "${language}".` });
@@ -31,13 +31,13 @@ export const extractCommand = Command.make("extract", { input }, (args) => {
 
 function printTracks(
   filePath: string,
-): Effect.Effect<void, PlatformError, CommandExecutor.CommandExecutor | Terminal.Terminal> {
+): Effect.Effect<void, PlatformError, ChildProcessSpawner.ChildProcessSpawner | Terminal.Terminal> {
   return Effect.gen(function* () {
     const terminal = yield* Terminal.Terminal;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
     const args = "-loglevel error -select_streams s -show_entries stream=index:stream_tags=language,title -of csv=p=0".split(" ");
-    const lines = yield* ShellCommand.make("ffprobe", ...args, filePath)
-      .pipe(ShellCommand.lines);
+    const lines = yield* spawner.lines(ChildProcess.make("ffprobe", [...args, filePath]));
 
     const rows = lines.flatMap((line) => {
       const [track, ...rest] = line.split(",");
@@ -52,24 +52,20 @@ function extractTrack(
   sourceFilePath: string,
   track: string,
   language: string,
-): Effect.Effect<void, PlatformError, CommandExecutor.CommandExecutor> {
+): Effect.Effect<void, PlatformError, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const baseName = path.basename(sourceFilePath, path.extname(sourceFilePath));
     const dirName = path.dirname(sourceFilePath);
     const outputPath = path.join(dirName, `${baseName}.${language}.srt`);
 
     yield* Effect.log(`Extracting subtitle track ${track} to ${outputPath}.`);
 
-    yield* ShellCommand.make(
+    yield* spawner.exitCode(ChildProcess.make(
       "ffmpeg",
-      "-i", sourceFilePath,
-      "-map", `0:${track}`,
-      outputPath,
-    ).pipe(
-      ShellCommand.stdout("inherit"),
-      ShellCommand.stderr("inherit"),
-      ShellCommand.exitCode,
-    );
+      ["-i", sourceFilePath, "-map", `0:${track}`, outputPath],
+      { stdout: "inherit", stderr: "inherit" },
+    ));
 
     yield* Effect.log(`Saved extracted subtitles to ${outputPath}.`);
   });
