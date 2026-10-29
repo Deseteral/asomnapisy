@@ -1,6 +1,5 @@
-import { Effect } from "effect";
-import { FileSystem } from "@effect/platform";
-import type { PlatformError } from "@effect/platform/Error";
+import { Effect, FileSystem } from "effect";
+import type { PlatformError } from "effect/PlatformError";
 
 export type SrtSubtitle = {
   order: string;

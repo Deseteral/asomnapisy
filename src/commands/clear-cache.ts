@@ -1,4 +1,4 @@
-import { Command } from "@effect/cli";
+import { Command } from "effect/cli";
 import { Effect } from "effect";
 import { TranslationCache } from "../services/translation-cache.ts";
 

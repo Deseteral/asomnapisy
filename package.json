@@ -10,11 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/ai": "0.36.0",
-    "@effect/ai-openai": "0.40.1",
-    "@effect/cli": "0.75.2",
-    "@effect/platform-bun": "0.90.0",
-    "effect": "3.21.4"
+    "@effect/ai-openai": "4.0.6",
+    "@effect/platform-bun": "4.0.6",
+    "effect": "4.0.6"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

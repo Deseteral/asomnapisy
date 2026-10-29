@@ -1,5 +1,5 @@
-import { AiError, LanguageModel, Prompt } from "@effect/ai";
-import { Array as Arr, Effect, Either, Match, Ref, Schema } from "effect";
+import { AiError, LanguageModel, Prompt } from "effect/ai";
+import { Array as Arr, Effect, Result, Match, Ref, Schema } from "effect";
 import type { SrtData, SrtSubtitle } from "../data/srt.ts";
 import { getFullText } from "../data/srt.ts";
 import { formatAsEpisodeCode, languageCodeToName, type SubtitleTranslationData } from "../data/translation-data.ts";
@@ -117,7 +117,7 @@ function translateChunk(
   ];
 
   return attemptTranslation(chunk, initialMessages, maxRetries)
-    .pipe(Effect.catchAll((error) => {
+    .pipe(Effect.catch((error) => {
       if (chunk.subtitles.length === 1) {
         const orderLabel = chunk.subtitles[0]?.order;
         return Effect.succeed(chunk.subtitles)
@@ -130,7 +130,7 @@ function translateChunk(
 
       return Effect.logWarning(`Chunk ${chunk.id}: ${error.message}. Splitting ${chunk.subtitles.length} subtitles into ${left.subtitles.length} + ${right.subtitles.length}.`)
         .pipe(
-          Effect.zipRight(Effect.all([
+          Effect.andThen(Effect.all([
             translateChunk(systemPrompt, left, maxRetries),
             translateChunk(systemPrompt, right, maxRetries),
           ])),
@@ -152,7 +152,7 @@ function attemptTranslation(
     const response = yield* LanguageModel.generateText({ prompt: messages });
 
     const requestedIds = new Set(chunk.subtitles.map((s) => s.order));
-    const translations = yield* parseTaggedSubtitles(response.text, requestedIds);
+    const translations = yield* Effect.fromResult(parseTaggedSubtitles(response.text, requestedIds));
 
     return chunk.subtitles.map((subtitle) => ({
       ...subtitle,
@@ -171,7 +171,7 @@ function attemptTranslation(
     Effect.tapError((error) =>
       Effect.logWarning(`Chunk ${chunk.id}: attempt failed (${error._tag}: ${error.message}). Retrying with repair prompt.`),
     ),
-    Effect.catchAll((error) =>
+    Effect.catch((error) =>
       retriesLeft > 0
         ? attemptTranslation(chunk, [...messages, repairMessage(error)], retriesLeft - 1)
         : Effect.fail(error),
@@ -184,34 +184,34 @@ const SUBTITLE_TAG_REGEX = /<subtitle\s+id=["']?([^"'>\s]+)["']?\s*>([\s\S]*?)<\
 function parseTaggedSubtitles(
   rawText: string,
   requestedIds: ReadonlySet<string>,
-): Either.Either<Map<string, string[]>, ChunkTranslationError> {
+): Result.Result<Map<string, string[]>, ChunkTranslationError> {
   const translations = new Map<string, string[]>();
 
   for (const [, id, rawContent] of rawText.matchAll(SUBTITLE_TAG_REGEX)) {
     if (!id || !rawContent) continue;
 
     if (translations.has(id)) {
-      return Either.left(new ChunkTranslationError({ message: `Duplicate subtitle id: ${id}` }));
+      return Result.fail(new ChunkTranslationError({ message: `Duplicate subtitle id: ${id}` }));
     }
 
     const content = rawContent.replace(/\r\n/g, "\n").trim();
     if (content.length === 0) {
-      return Either.left(new ChunkTranslationError({ message: `Empty translation for subtitle id: ${id}` }));
+      return Result.fail(new ChunkTranslationError({ message: `Empty translation for subtitle id: ${id}` }));
     }
 
     translations.set(id, content.split("\n"));
   }
 
   if (translations.size === 0) {
-    return Either.left(new ChunkTranslationError({ message: "No valid <subtitle> tags found in response." }));
+    return Result.fail(new ChunkTranslationError({ message: "No valid <subtitle> tags found in response." }));
   }
 
   const missingIds = [...requestedIds].filter((id) => !translations.has(id));
   if (missingIds.length > 0) {
-    return Either.left(new ChunkTranslationError({ message: `Missing subtitle ids: ${missingIds.join(", ")}` }));
+    return Result.fail(new ChunkTranslationError({ message: `Missing subtitle ids: ${missingIds.join(", ")}` }));
   }
 
-  return Either.right(translations);
+  return Result.succeed(translations);
 }
 
 function splitChunk(chunk: Chunk): [Chunk, Chunk] {

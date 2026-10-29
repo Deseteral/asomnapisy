@@ -1,8 +1,8 @@
 import { Config, Layer, Match, Redacted } from "effect";
-import { HttpClient, HttpClientRequest } from "@effect/platform";
-import type { LanguageModel } from "@effect/ai";
+import { HttpClient, HttpClientRequest } from "effect/http";
+import type { LanguageModel } from "effect/ai";
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
-import type { ConfigError } from "effect/ConfigError";
+import type { ConfigError } from "effect/Config";
 
 export const LLM_PROVIDERS = ["ollama", "lmstudio", "openrouter"] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
@@ -33,7 +33,7 @@ export function makeLanguageModelLayer(
 
 function makeOllamaClient(): LlmClientLayer {
   return OpenAiClient.layerConfig({
-    apiUrl: Config.string("OLLAMA_URL").pipe(
+    apiUrl: Config.String("OLLAMA_URL").pipe(
       Config.withDefault("http://localhost:11434"),
       Config.map((url) => `${url}/v1`),
     ),
@@ -43,7 +43,7 @@ function makeOllamaClient(): LlmClientLayer {
 
 function makeLmStudioClient(): LlmClientLayer {
   return OpenAiClient.layerConfig({
-    apiUrl: Config.string("LMSTUDIO_URL").pipe(
+    apiUrl: Config.String("LMSTUDIO_URL").pipe(
       Config.withDefault("http://localhost:1234"),
       Config.map((url) => `${url}/v1`),
     ),
@@ -59,7 +59,7 @@ function makeOpenRouterClient(sessionId?: string): LlmClientLayer {
 
   return OpenAiClient.layerConfig({
     apiUrl: Config.succeed("https://openrouter.ai/api/v1"),
-    apiKey: Config.redacted("OPENROUTER_API_KEY"),
+    apiKey: Config.Redacted("OPENROUTER_API_KEY"),
     transformClient: (client) => client.pipe(
       HttpClient.mapRequest(HttpClientRequest.setHeaders(headers)),
     ),
